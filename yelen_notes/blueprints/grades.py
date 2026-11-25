@@ -27,7 +27,10 @@ from yelen_notes.security import (
     user_can_edit_grades,
     user_can_view_class,
 )
-from yelen_notes.services.calculation_service import compute_period_class_results
+from yelen_notes.services.calculation_service import (
+    compute_annual_class_results,
+    compute_period_class_results,
+)
 from yelen_notes.services.grade_service import (
     GradeConflictError,
     GradeValidationError,
@@ -389,6 +392,8 @@ def period_observations():
 
     obs_by_enrollment: dict[int, StudentPeriodObservation] = {}
     active_enrollments = []
+    computed_results = None
+    student_results_by_enrollment = {}
     if selected_class:
         active_enrollments = [e for e in selected_class.enrollments if e.is_active]
         enr_ids = [e.id for e in active_enrollments]
@@ -402,6 +407,13 @@ def period_observations():
             for item in q.all():
                 obs_by_enrollment[item.enrollment_id] = item
 
+        if scope == "ANNUEL":
+            computed_results = compute_annual_class_results(selected_class, periods)
+            student_results_by_enrollment = computed_results.all_rows_by_enrollment
+        elif selected_period:
+            computed_results = compute_period_class_results(selected_class, selected_period)
+            student_results_by_enrollment = computed_results.all_rows_by_enrollment
+
     return render_template(
         "grades/observations.html",
         selected_year=selected_year,
@@ -412,6 +424,8 @@ def period_observations():
         scope=scope,
         active_enrollments=active_enrollments,
         obs_by_enrollment=obs_by_enrollment,
+        computed_results=computed_results,
+        student_results_by_enrollment=student_results_by_enrollment,
         can_edit=can_edit,
     )
 

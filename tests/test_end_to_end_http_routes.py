@@ -162,6 +162,10 @@ def test_complete_school_workflow_over_http(app, client):
 
     obs_html = client.get("/notes/observations?class_id=1&period_id=1&scope=PERIODE")
     assert obs_html.status_code == 200
+    obs_text = obs_html.data.decode("utf-8")
+    assert "Moyenne période /10" in obs_text
+    assert "8,50" in obs_text
+    assert "6,00" in obs_text
     tok = extract_csrf_token(obs_html.data)
     assert (
         client.post(
