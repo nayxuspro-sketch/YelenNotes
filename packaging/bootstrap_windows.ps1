@@ -186,18 +186,25 @@ try {
         Write-Host "  [AUTO] Creation de l'environnement virtuel avec : $BasePython" -ForegroundColor Yellow
         $venvCode = Invoke-ExternalCommand $BasePython @("-m", "venv", $VenvDir)
         if ($venvCode -ne 0 -or -not (Test-Path -LiteralPath $VenvPython)) {
+            if (Test-Path -LiteralPath $VenvDir) {
+                Remove-Item -LiteralPath $VenvDir -Recurse -Force
+            }
+            $venvCode = Invoke-ExternalCommand $BasePython @("-m", "venv", "--without-pip", $VenvDir)
+        }
+        if ($venvCode -ne 0 -or -not (Test-Path -LiteralPath $VenvPython)) {
             throw "Echec de la creation de l'environnement virtuel dans $VenvDir."
         }
     }
     Write-Host "  [OK] Environnement virtuel pret : $VenvPython" -ForegroundColor Green
 
-    # Verifier et installer pip dans l'environnement virtuel si absent
+    # Verifier et installer automatiquement pip / wheel / setuptools (meme sur pythoncore sans ensurepip)
     $pipCheck = Invoke-ExternalCommand $VenvPython @("-m", "pip", "--version")
     if ($pipCheck -ne 0) {
-        Write-Host "  [AUTO] Activation automatique de pip (ensurepip)..." -ForegroundColor Yellow
-        $epCode = Invoke-ExternalCommand $VenvPython @("-m", "ensurepip", "--upgrade")
+        Write-Host "  [AUTO] Installation automatique de pip dans l'environnement virtuel..." -ForegroundColor Yellow
+        $BootstrapPipScript = Join-Path $RootDir "packaging\ensure_pip_bootstrap.py"
+        $epCode = Invoke-ExternalCommand $VenvPython @($BootstrapPipScript)
         if ($epCode -ne 0) {
-            throw "Impossible d'initialiser pip dans l'environnement virtuel."
+            throw "Impossible d'initialiser pip dans l'environnement virtuel (verifiez votre connexion Internet)."
         }
     }
 
