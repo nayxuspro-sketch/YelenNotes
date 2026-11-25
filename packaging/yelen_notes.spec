@@ -24,9 +24,14 @@ added_files = [
 
 hidden_imports = [
     "waitress",
+    "logging.config",
     "sqlalchemy.dialects.sqlite",
+    "sqlalchemy.sql.default_comparator",
     "flask_migrate",
     "alembic",
+    "alembic.runtime.migration",
+    "alembic.operations",
+    "alembic.script",
     "openpyxl",
     "reportlab",
     "reportlab.pdfbase.ttfonts",

@@ -70,13 +70,12 @@ python3 -m venv .venv
 
 ---
 
-## Compilation du dossier portable Windows 10/11 (Python 3.12 64 bits)
+## Compilation et lancement 1-clic sous Windows 10/11 (Installation 100 % automatique)
 
-Sous Windows 10/11 64 bits :
-```bat
-packaging\build_windows_portable.bat
-```
-Produit le dossier autonome `dist\YELEN-NOTES\` prêt à être copié-collé sans installer Python ni connexion Internet.
+Deux lanceurs automatiques sont fournis directement à la racine du dossier (ils détectent ou installent automatiquement Python 64 bits, créent l'environnement virtuel et installent toutes les bibliothèques manquantes) :
+
+- **`1_Installer_et_Lancer_Directement.bat`** : installe automatiquement tout ce qui manque et ouvre immédiatement Yelen Notes dans votre navigateur.
+- **`2_Compiler_Dossier_Portable_EXE.bat`** *(ou `packaging\build_windows_portable.bat`)* : installe automatiquement tout ce qui manque et produit le dossier autonome **`dist\YELEN-NOTES\`** (`YelenNotes.exe`) prêt à être copié-collé sur clé USB pour n'importe quel PC d'école sans Python ni connexion Internet.
 
 ---
 
