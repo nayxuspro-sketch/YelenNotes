@@ -34,6 +34,7 @@ from yelen_notes.services.calculation_service import (
 )
 from yelen_notes.services.excel_service import (
     export_annual_ranking_to_excel,
+    export_period_ranking_to_excel,
     export_period_releve_to_excel,
 )
 from yelen_notes.services.pdf_service import (
@@ -242,7 +243,7 @@ def merit_ranking_excel():
     else:
         period = db.get_or_404(EvaluationPeriod, period_id)
         p_res = compute_period_class_results(ac, period)
-        xlsx_bytes = export_period_releve_to_excel(settings, p_res)
+        xlsx_bytes = export_period_ranking_to_excel(settings, p_res)
         fname = f"classement_{ac.name.replace(' ', '_')}_{period.short_code}_{ac.school_year.label}.xlsx"
 
     return send_file(

@@ -170,7 +170,11 @@ def main(argv: list[str] | None = None) -> int:
 
     server = create_server(app, host=host, port=port, threads=max(2, threads))
 
+    shutting_down = False
+
     def _graceful_shutdown(_signum, _frame):
+        nonlocal shutting_down
+        shutting_down = True
         print("\nArrêt propre du serveur Yelen Notes en cours...", flush=True)
         server.close()
 
@@ -179,6 +183,11 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         server.run()
+    except KeyboardInterrupt:
+        pass
+    except OSError:
+        if not shutting_down:
+            raise
     finally:
         with app.app_context():
             db.session.remove()

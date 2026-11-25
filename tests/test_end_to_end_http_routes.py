@@ -151,10 +151,10 @@ def test_complete_school_workflow_over_http(app, client):
             "csrf_token": tok,
             "class_id": "1",
             "period_id": "1",
-            "cell_1_1": "8.5",
-            "cell_1_2": "17",
-            "cell_2_1": "6",
-            "cell_2_2": "12",
+            "cell_1_1": "6",
+            "cell_1_2": "12",
+            "cell_2_1": "8.5",
+            "cell_2_2": "17",
         },
         follow_redirects=True,
     )
@@ -206,6 +206,23 @@ def test_complete_school_workflow_over_http(app, client):
         pdf_resp = client.get(pdf_url)
         assert pdf_resp.status_code == 200
         assert pdf_resp.data.startswith(b"%PDF-")
+
+    # Vérification explicite de l'ordre des colonnes (N° en 1re position) et de la renumérotation 1..N
+    import io
+    from openpyxl import load_workbook
+
+    rk_xlsx = client.get("/resultats/classement/excel?class_id=1&period_id=1&scope=PERIODE")
+    assert rk_xlsx.status_code == 200
+    wb = load_workbook(io.BytesIO(rk_xlsx.data))
+    ws = wb.active
+    assert ws.cell(row=3, column=1).value == "N°"
+    assert ws.cell(row=3, column=2).value == "Rang"
+    # ZONGO (roll_number=2 dans la classe) est 1er au mérite -> son N° dans le classement doit être 1
+    assert ws.cell(row=4, column=1).value == 1
+    assert ws.cell(row=4, column=2).value == "1er"
+    assert ws.cell(row=4, column=3).value == "ZONGO"
+    assert ws.cell(row=5, column=1).value == 2
+    assert ws.cell(row=5, column=3).value == "SAWADOGO"
 
     # 9. Création d'une sauvegarde manuelle depuis l'interface
     bkp_page = client.get("/administration/sauvegardes")

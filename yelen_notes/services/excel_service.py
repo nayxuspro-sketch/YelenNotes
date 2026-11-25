@@ -383,8 +383,8 @@ def export_period_releve_to_excel(
     ws_rank["A2"].font = BOLD_FONT
 
     rank_headers = [
-        "Rang",
         "N°",
+        "Rang",
         "Nom",
         "Prénoms",
         "Sexe",
@@ -399,12 +399,12 @@ def export_period_releve_to_excel(
         c.font = HEADER_FONT
         c.border = CELL_BORDER
 
-    for row in results.ranked_rows:
+    for idx, row in enumerate(results.ranked_rows, start=1):
         st = row.enrollment.student
         ws_rank.append(
             [
+                idx,
                 row.rank_label,
-                row.enrollment.roll_number,
                 st.last_name,
                 st.first_names,
                 st.sex,
@@ -425,6 +425,65 @@ def export_period_releve_to_excel(
     return buf.getvalue()
 
 
+def export_period_ranking_to_excel(
+    settings: EstablishmentSettings,
+    results: PeriodClassResults,
+) -> bytes:
+    """Exporte uniquement le classement périodique par ordre de mérite vers Excel (§11 CdC)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ordre de mérite"
+
+    school_label = settings.school_name or "Établissement scolaire"
+    ws.append([f"{school_label} — Classement par ordre de mérite"])
+    ws.append(
+        [f"Classe : {results.academic_class.name} — {results.period.name} ({results.academic_class.school_year.label})"]
+    )
+    ws["A1"].font = Font(name="Calibri", size=12, bold=True)
+    ws["A2"].font = BOLD_FONT
+
+    headers = [
+        "N°",
+        "Rang",
+        "Nom",
+        "Prénoms",
+        "Sexe",
+        f"Moyenne /{format_compact_decimal_fr(results.general_scale)}",
+        "Appréciation",
+    ]
+    ws.append(headers)
+    hr = ws.max_row
+    for c_idx in range(1, len(headers) + 1):
+        c = ws.cell(row=hr, column=c_idx)
+        c.fill = HEADER_FILL
+        c.font = HEADER_FONT
+        c.border = CELL_BORDER
+
+    for idx, row in enumerate(results.ranked_rows, start=1):
+        st = row.enrollment.student
+        ws.append(
+            [
+                idx,
+                row.rank_label,
+                st.last_name,
+                st.first_names,
+                st.sex,
+                row.display_average,
+                row.appreciation,
+            ]
+        )
+        r = ws.max_row
+        for c_idx in range(1, len(headers) + 1):
+            c = ws.cell(row=r, column=c_idx)
+            c.font = BODY_FONT
+            c.border = CELL_BORDER
+
+    _auto_fit_columns(ws)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def export_annual_ranking_to_excel(
     settings: EstablishmentSettings,
     annual_results: AnnualClassResults,
@@ -440,7 +499,7 @@ def export_annual_ranking_to_excel(
     ws["A1"].font = Font(name="Calibri", size=12, bold=True)
     ws["A2"].font = BOLD_FONT
 
-    headers = ["Rang annuel", "N°", "Nom", "Prénoms", "Sexe"]
+    headers = ["N°", "Rang annuel", "Nom", "Prénoms", "Sexe"]
     for p in annual_results.periods:
         headers.append(f"Moy. {p.short_code}")
     headers.extend(
@@ -457,9 +516,9 @@ def export_annual_ranking_to_excel(
         c.font = HEADER_FONT
         c.border = CELL_BORDER
 
-    for row in annual_results.ranked_rows:
+    for idx, row in enumerate(annual_results.ranked_rows, start=1):
         st = row.enrollment.student
-        vals = [row.rank_label, row.enrollment.roll_number, st.last_name, st.first_names, st.sex]
+        vals = [idx, row.rank_label, st.last_name, st.first_names, st.sex]
         for p in annual_results.periods:
             vals.append(row.period_displays.get(p.id, "—"))
         vals.extend([row.display_annual_average, row.appreciation])
