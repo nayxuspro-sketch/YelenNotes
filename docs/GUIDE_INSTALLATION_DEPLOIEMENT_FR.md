@@ -69,10 +69,9 @@ C:\ProgramData\YelenNotes\          (ou %LOCALAPPDATA%\YelenNotes\ sans droits a
 
 ---
 
-## 4. Compilation du dossier portable depuis le code source (Développeurs / Maintenance)
+## 4. Compilation ou lancement automatique depuis le code source (Windows 10/11)
 
-Sur un poste de compilation Windows 10/11 64 bits disposant de **Python 3.12 (64 bits)** :
-```bat
-packaging\build_windows_portable.bat
-```
-Ce script installe les versions exactes figées dans `requirements-build.txt`, compile l'application avec PyInstaller en mode `ONEDIR` et assemble le dossier prêt à distribuer dans `dist\YELEN-NOTES\`.
+Les scripts automatiques détectent ou installent d'eux-mêmes tout ce qui manque (Python 64 bits via `py install 3.12-64` / `winget` / `python.org`, environnement virtuel isolé, `pip`, `PyInstaller` et bibliothèques) :
+
+- **Pour lancer immédiatement sans compiler :** double-cliquez sur **`1_Installer_et_Lancer_Directement.bat`** à la racine.
+- **Pour générer le dossier portable autonome `dist\YELEN-NOTES\` (`YelenNotes.exe`) :** double-cliquez sur **`2_Compiler_Dossier_Portable_EXE.bat`** (ou sur `packaging\build_windows_portable.bat`).
