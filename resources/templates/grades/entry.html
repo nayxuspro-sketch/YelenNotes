@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Saisie des notes{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Saisie et contrôle des notes</h1>
+        <small class="text-muted">
+            Navigation clavier : <kbd>Entrée</kbd> / <kbd>↓</kbd> élève suivant • <kbd>Tab</kbd> matière suivante •
+            <code>ABS</code> = Absent • <code>DISP</code> = Dispensé • Vide = Non saisie (jamais transformé en 0)
+        </small>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        {% if can_edit %}
+        <span id="grade-save-status" class="badge rounded-pill text-bg-success px-3 py-2">
+            ● Toutes les saisies sont enregistrées
+        </span>
+        {% endif %}
+        {% if selected_class and selected_period %}
+        <a href="{{ url_for('grades.grade_history_view', class_id=selected_class.id, period_id=selected_period.id) }}"
+           class="btn btn-sm btn-outline-secondary">
+            Historique des modifications
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Filtres Année / Classe / Période / Matière / Recherche (§8.1, §8.2 CdC) -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for('grades.grade_entry') }}" class="row g-2 align-items-center">
+            <div class="col-md-2">
+                <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for cls in classes %}
+                    <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>
+                        Classe {{ cls.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for p in periods %}
+                    <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>
+                        {{ p.name }} ({{ p.status }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="subject_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">Toutes les matières (matrice)</option>
+                    {% for s in all_subjects %}
+                    <option value="{{ s.id }}" {% if subject_filter_id == s.id %}selected{% endif %}>
+                        Par matière : {{ s.name }} (/{{ s.max_score | compact_fr }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="text" name="q" class="form-control form-control-sm" value="{{ search_q }}" placeholder="Rechercher élève…">
+            </div>
+            <div class="col-md-2 d-flex align-items-center justify-content-between gap-1">
+                <div class="form-check m-0">
+                    <input class="form-check-input" type="checkbox" name="missing" value="1" id="chkMissing"
+                           {% if only_missing %}checked{% endif %} onchange="this.form.submit()">
+                    <label class="form-check-label small" for="chkMissing">Manquantes</label>
+                </div>
+                <button type="submit" class="btn btn-sm btn-secondary">OK</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if not selected_class or not selected_period %}
+<div class="alert alert-warning">
+    Configurez d'abord une <a href="{{ url_for('academics.classes_list') }}">classe</a> et une
+    <a href="{{ url_for('settings.periods') }}">période d'évaluation</a> pour saisir les notes.
+</div>
+{% elif not all_subjects %}
+<div class="alert alert-warning">
+    Aucune matière active n'est configurée pour la classe <strong>{{ selected_class.name }}</strong>.
+    <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}">Configurer les matières →</a>
+</div>
+{% else %}
+
+{% if not can_edit %}
+<div class="alert alert-secondary py-2 small">
+    <strong>Lecture seule :</strong> {{ edit_lock_reason }}
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('grades.save_grid_form') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="class_id" value="{{ selected_class.id }}">
+    <input type="hidden" name="period_id" value="{{ selected_period.id }}">
+    {% if subject_filter_id %}
+    <input type="hidden" name="subject_id" value="{{ subject_filter_id }}">
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>
+                <strong>{{ selected_class.name }}</strong> — {{ selected_period.name }}
+                • Avancement : <strong>{{ results.completion_rate_percent | dec_fr(1) }} %</strong>
+                ({{ results.ranked_count }} complets / {{ results.active_count }} élèves actifs)
+            </span>
+            {% if can_edit %}
+            <button type="submit" class="btn btn-sm btn-primary">
+                Enregistrer toutes les notes affichées
+            </button>
+            {% endif %}
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle mb-0"
+                   id="grades-matrix-table"
+                   data-api-url="{{ url_for('grades.api_save_cell') }}">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 48px;">N°</th>
+                        <th style="min-width: 190px;">Nom et Prénoms</th>
+                        <th class="text-center" style="width: 38px;">S</th>
+                        {% for subj in displayed_subjects %}
+                        <th class="text-center">
+                            <div>{{ subj.short_label or subj.name }}</div>
+                            <div class="text-muted fw-normal" style="font-size: 0.74rem;">
+                                [{{ subj.min_score | compact_fr }}–{{ subj.max_score | compact_fr }}] • Coef {{ subj.coefficient | compact_fr }}
+                                {% if subj.max_score != subj.reference_scale %}
+                                    → /{{ subj.reference_scale | compact_fr }}
+                                {% endif %}
+                            </div>
+                        </th>
+                        {% endfor %}
+                        <th class="text-center" style="min-width: 145px;">État / Moy. prov.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in displayed_rows %}
+                    {% set row_idx = loop.index0 %}
+                    {% set enr = row.enrollment %}
+                    <tr>
+                        <td class="text-center fw-semibold">{{ enr.roll_number }}</td>
+                        <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                        <td class="text-center">{{ enr.student.sex }}</td>
+
+                        {% for subj in displayed_subjects %}
+                        {% set col_idx = loop.index0 %}
+                        {% set cell_pair = grade_inputs.get((enr.id, subj.id), ('', 0)) %}
+                        <td class="text-center p-1">
+                            {% if can_edit %}
+                            <input type="hidden" id="ver_{{ enr.id }}_{{ subj.id }}"
+                                   name="ver_{{ enr.id }}_{{ subj.id }}"
+                                   value="{{ cell_pair[1] if cell_pair[1] > 0 else '' }}">
+                            <input type="text"
+                                   class="grade-input"
+                                   name="cell_{{ enr.id }}_{{ subj.id }}"
+                                   value="{{ cell_pair[0] }}"
+                                   data-row-idx="{{ row_idx }}"
+                                   data-col-idx="{{ col_idx }}"
+                                   data-enrollment-id="{{ enr.id }}"
+                                   data-period-id="{{ selected_period.id }}"
+                                   data-subject-id="{{ subj.id }}"
+                                   data-version="{{ cell_pair[1] if cell_pair[1] > 0 else '' }}"
+                                   data-min="{{ subj.min_score }}"
+                                   data-max="{{ subj.max_score }}"
+                                   data-allow-exemption="{{ '1' if subj.allow_exemption else '0' }}"
+                                   autocomplete="off">
+                            {% else %}
+                            <span class="fw-semibold">{{ row.subject_cells[subj.id].display_raw }}</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+
+                        <td class="text-center small" id="row-summary-{{ enr.id }}">
+                            {% if row.is_complete %}
+                                <span class="badge text-bg-success me-1">Complet</span>
+                                <strong>{{ row.display_average }}</strong>
+                            {% else %}
+                                <span class="badge text-bg-warning">{{ row.unranked_reason }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{{ 4 + (displayed_subjects | length) }}" class="text-center py-4 text-muted">
+                            Aucun élève actif à afficher pour ces critères.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if can_edit and displayed_rows %}
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+            <span class="small text-muted">L'enregistrement automatique s'effectue à chaque changement de cellule.</span>
+            <button type="submit" class="btn btn-primary btn-sm">Enregistrer toutes les notes</button>
+        </div>
+        {% endif %}
+    </div>
+</form>
+{% endif %}
+{% endblock %}

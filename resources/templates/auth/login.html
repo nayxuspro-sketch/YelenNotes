@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Connexion{% endblock %}
+
+{% block guest_content %}
+<div class="card mx-auto shadow-sm" style="max-width: 460px;">
+    <div class="card-header py-3 bg-white text-center">
+        <div class="yn-brand-badge mx-auto mb-2">YN</div>
+        <h1 class="h5 fw-bold mb-0">Yelen Notes</h1>
+        <div class="text-muted small">Gestion et calcul des notes — Écoles primaires</div>
+    </div>
+    <div class="card-body p-4">
+        <form method="post" action="{{ url_for('auth.login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ next_url or '' }}">
+
+            <div class="mb-3">
+                <label for="username" class="form-label fw-semibold">Identifiant</label>
+                <input type="text" class="form-control" id="username" name="username" required autofocus autocomplete="username">
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label fw-semibold">Mot de passe</label>
+                <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">Se connecter</button>
+        </form>
+
+        {% if is_demo %}
+        <hr>
+        <div class="alert alert-warning small mb-0">
+            <div class="fw-bold mb-1">Comptes fictifs de la base de démonstration :</div>
+            <ul class="mb-0 ps-3">
+                <li>Admin : <code>admin_demo</code> / <code>AdminDemo2026!</code></li>
+                <li>Directeur : <code>directeur_demo</code> / <code>Directeur2026!</code></li>
+                <li>Titulaire CM2 : <code>titulaire_cm2</code> / <code>Enseignant2026!</code></li>
+                <li>Consultation : <code>consultation_demo</code> / <code>Consult2026!</code></li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-footer bg-light text-center small text-muted">
+        Version {{ app_version }} • Fonctionnement 100 % local sans Internet
+    </div>
+</div>
+{% endblock %}

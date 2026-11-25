@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Bulletins scolaires PDF{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Bulletins scolaires périodiques et annuels (A4 PDF)</h1>
+        <small class="text-muted">Aperçu avant impression et édition individuelle, par sélection ou pour toute la classe (§12 CdC)</small>
+    </div>
+</div>
+
+<!-- Sélection Classe / Type de bulletin / Période -->
+<div class="card mb-3 no-print">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for('reports.bulletins_center') }}" class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for cls in classes %}
+                    <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>
+                        Classe {{ cls.name }} ({{ cls.school_year.label }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="scope" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="PERIODE" {% if scope == 'PERIODE' %}selected{% endif %}>Bulletins périodiques</option>
+                    <option value="ANNUEL" {% if scope == 'ANNUEL' %}selected{% endif %}>Bulletins annuels</option>
+                </select>
+            </div>
+            {% if scope == 'PERIODE' %}
+            <div class="col-md-4">
+                <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for p in periods %}
+                    <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>
+                        {{ p.name }} ({{ p.status }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% set res = annual_results if scope == 'ANNUEL' else period_results %}
+{% if res and selected_class %}
+<div class="row g-4">
+    <div class="col-lg-6 no-print">
+        <form method="post" action="{{ url_for('reports.bulletins_pdf') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="class_id" value="{{ selected_class.id }}">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            {% if selected_period %}<input type="hidden" name="period_id" value="{{ selected_period.id }}">{% endif %}
+
+            <div class="card">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span>Production individuelle ou collective</span>
+                    <div class="d-flex gap-1">
+                        <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, inline=1) }}"
+                           target="_blank" class="btn btn-sm btn-outline-primary">
+                            Aperçu PDF Classe
+                        </a>
+                        <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope) }}"
+                           class="btn btn-sm btn-primary">
+                            PDF Toute la classe
+                        </a>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height: 540px;">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 36px;">
+                                    <input type="checkbox" id="check-all-students" class="form-check-input">
+                                </th>
+                                <th>N°</th>
+                                <th>Élève</th>
+                                <th class="text-center">Moyenne</th>
+                                <th class="text-center">Rang</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in res.active_rows %}
+                            {% set enr = row.enrollment %}
+                            <tr class="{% if preview_enrollment_id == enr.id %}table-primary{% endif %}">
+                                <td class="text-center">
+                                    <input type="checkbox" name="enrollment_ids[]" value="{{ enr.id }}"
+                                           class="form-check-input student-select-checkbox">
+                                </td>
+                                <td>{{ enr.roll_number }}</td>
+                                <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                                <td class="text-center fw-bold">
+                                    {{ row.display_annual_average if scope == 'ANNUEL' else row.display_average }}
+                                </td>
+                                <td class="text-center small">{{ row.rank_label }}</td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, preview_id=enr.id) }}"
+                                           class="btn btn-outline-secondary">Aperçu</a>
+                                        <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, enrollment_id=enr.id) }}"
+                                           class="btn btn-outline-dark">PDF</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if res.active_rows %}
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Cochez les élèves souhaités pour un PDF groupé :</span>
+                    <button type="submit" name="selection_mode" value="selected" class="btn btn-sm btn-outline-primary">
+                        Générer PDF de la sélection
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Aperçu avant impression intégré (§12.4 CdC) -->
+    <div class="col-lg-6">
+        {% set target_id = preview_enrollment_id or (res.active_rows[0].enrollment.id if res.active_rows else None) %}
+        {% set prev_row = res.all_rows_by_enrollment.get(target_id) if target_id else None %}
+        {% if prev_row %}
+        <div class="d-flex justify-content-between align-items-center mb-2 no-print">
+            <span class="fw-semibold small">Aperçu avant impression — {{ prev_row.enrollment.student.full_name }}</span>
+            <div class="d-flex gap-1">
+                <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">Imprimer cet aperçu</button>
+                <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, enrollment_id=prev_row.enrollment.id, inline=1) }}"
+                   target="_blank" class="btn btn-sm btn-primary">Ouvrir le PDF A4 exact</a>
+            </div>
+        </div>
+
+        <div class="yn-paper-preview">
+            <div class="row text-center border-bottom pb-2 mb-2 small">
+                <div class="col-5">
+                    <div class="fw-bold text-uppercase">{{ settings.country }}</div>
+                    <div class="fst-italic">{{ settings.motto }}</div>
+                    {% if settings.ceb %}<div>CEB : {{ settings.ceb }}</div>{% endif %}
+                </div>
+                <div class="col-2">
+                    {% if settings.logo_filename %}
+                    <img src="{{ url_for('settings.school_logo') }}" alt="Logo" style="max-height: 48px;">
+                    {% endif %}
+                </div>
+                <div class="col-5">
+                    <div class="fw-bold">{{ settings.school_name or 'Établissement scolaire' }}</div>
+                    <div>Année : <strong>{{ res.academic_class.school_year.label }}</strong></div>
+                </div>
+            </div>
+
+            <div class="text-center fw-bold my-2">
+                {% if scope == 'ANNUEL' %}
+                    BULLETIN SCOLAIRE ANNUEL
+                {% else %}
+                    BULLETIN SCOLAIRE — {{ res.period.name | upper }}
+                {% endif %}
+            </div>
+
+            <div class="border rounded p-2 bg-light small mb-2 d-flex justify-content-between flex-wrap gap-2">
+                <div>
+                    <div><strong>Élève :</strong> {{ prev_row.enrollment.student.full_name }} (N° {{ prev_row.enrollment.roll_number }})</div>
+                    <div><strong>Né(e) le :</strong> {{ prev_row.enrollment.student.birth_date | date_fr }} ({{ prev_row.age }} ans) • <strong>Sexe :</strong> {{ prev_row.enrollment.student.sex }}</div>
+                </div>
+                <div>
+                    <div><strong>Classe :</strong> {{ res.academic_class.name }} (Eff. : {{ res.active_rows | length }})</div>
+                    <div><strong>Redoublement :</strong> {{ prev_row.enrollment.repeated_class_detail or 'Néant' }}</div>
+                </div>
+            </div>
+
+            {% if scope == 'PERIODE' %}
+            <table class="table table-bordered table-sm small align-middle mb-2">
+                <thead>
+                    <tr>
+                        <th>Matières</th>
+                        <th class="text-center">Note</th>
+                        <th class="text-center">Barème</th>
+                        <th class="text-center">Coef</th>
+                        <th class="text-center">Points</th>
+                        <th class="text-center">Appréciation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for subj in res.subjects %}
+                    {% set c = prev_row.subject_cells[subj.id] %}
+                    <tr>
+                        <td>{{ subj.name }}</td>
+                        <td class="text-center fw-semibold">{{ c.display_raw }}</td>
+                        <td class="text-center">/{{ subj.max_score | compact_fr }}</td>
+                        <td class="text-center">{{ c.coefficient_applied | compact_fr if c.coefficient_applied > 0 else '—' }}</td>
+                        <td class="text-center">{{ c.display_points }}</td>
+                        <td class="text-center">{{ c.appreciation }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="table-light fw-bold">
+                        <td colspan="3">TOTAUX</td>
+                        <td class="text-center">{{ prev_row.total_coefficients | compact_fr }}</td>
+                        <td class="text-center">{{ prev_row.total_weighted_points | dec_fr(res.decimal_places) }}</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="border p-2 bg-light small mb-2">
+                <strong>MOYENNE GÉNÉRALE : {{ prev_row.display_average }} /{{ res.general_scale | compact_fr }}</strong> •
+                <strong>RANG :</strong> {{ prev_row.rank_label }} •
+                <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
+            </div>
+            {% else %}
+            <table class="table table-bordered table-sm small align-middle mb-2">
+                <thead>
+                    <tr>
+                        <th>Matières</th>
+                        <th class="text-center">Coef</th>
+                        {% for p in res.periods %}<th class="text-center">{{ p.short_code }}</th>{% endfor %}
+                        <th class="text-center">Moy. Ann.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for subj in res.subjects %}
+                    {% set ss = prev_row.subject_summaries[subj.id] %}
+                    <tr>
+                        <td>{{ subj.name }}</td>
+                        <td class="text-center">{{ subj.coefficient | compact_fr }}</td>
+                        {% for p in res.periods %}<td class="text-center">{{ ss.period_displays_on_ref.get(p.id, '—') }}</td>{% endfor %}
+                        <td class="text-center fw-bold">{{ ss.display_annual_subject_average }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="border p-2 bg-light small mb-2">
+                <strong>MOYENNE ANNUELLE : {{ prev_row.display_annual_average }} /{{ res.general_scale | compact_fr }}</strong> •
+                <strong>RANG ANNUEL :</strong> {{ prev_row.rank_label }} •
+                <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
+            </div>
+            {% endif %}
+
+            <div class="row g-2 small mt-2">
+                <div class="col-6 border p-2">
+                    <div class="fw-bold">Le / La Titulaire : {{ res.academic_class.titulaire_name }}</div>
+                    <div class="text-muted">{{ prev_row.teacher_observation or 'Observations : …' }}</div>
+                </div>
+                <div class="col-6 border p-2">
+                    <div class="fw-bold">{{ res.academic_class.director_title }} : {{ res.academic_class.director_name }}</div>
+                    <div class="text-muted">{{ prev_row.director_observation or 'Visa et cachet : …' }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">Sélectionnez une classe configurée pour générer et prévisualiser les bulletins scolaires.</div>
+{% endif %}
+{% endblock %}

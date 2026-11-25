@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Yelen Notes{% endblock %} — Gestion scolaire locale</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+    {% if is_demo_mode %}
+    <div class="yn-demo-strip">
+        ⚠ MODE DÉMONSTRATION — DONNÉES SCOLAIRES FICTIVES (`ecole_demo.db`) — Réservé aux essais et à la formation
+    </div>
+    {% endif %}
+
+    {% if is_unc_warning %}
+    <div class="alert alert-danger rounded-0 mb-0 py-2 text-center fw-semibold">
+        Alerte critique : la base SQLite semble placée sur un partage réseau UNC. Déplacez le dossier de données sur un disque local du serveur.
+    </div>
+    {% endif %}
+
+    {% if current_user.is_authenticated %}
+    <header class="yn-topbar py-2 px-3">
+        <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <a href="{{ url_for('dashboard.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2">
+                    <span class="yn-brand-badge">YN</span>
+                    <div>
+                        <div class="fw-bold lh-1">YELEN NOTES</div>
+                        <small class="text-white-50" style="font-size: 0.73rem;">
+                            v{{ app_version }} • {{ 'Multiposte réseau local' if server_mode == 'multiposte' else 'Monoposte local' }}
+                        </small>
+                    </div>
+                </a>
+                {% if current_establishment and current_establishment.school_name %}
+                <span class="vr bg-light opacity-25 d-none d-md-inline"></span>
+                <span class="fw-semibold d-none d-md-inline text-light">
+                    {{ current_establishment.school_name }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if nav_years %}
+                <form method="post" action="{{ url_for('dashboard.switch_view_year') }}" class="d-flex align-items-center gap-1 m-0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="nav-year-select" class="small text-white-50 me-1 d-none d-sm-inline">Année :</label>
+                    <select id="nav-year-select" name="school_year_id" class="form-select form-select-sm bg-light" onchange="this.form.submit()">
+                        {% for yr in nav_years %}
+                        <option value="{{ yr.id }}" {% if nav_selected_year and nav_selected_year.id == yr.id %}selected{% endif %}>
+                            {{ yr.label }}{% if yr.status == 'CLOTUREE' %} (Clôturée){% elif current_establishment and current_establishment.active_school_year_id == yr.id %} (Active){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+                {% endif %}
+
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        {{ current_user.full_name }} ({{ current_user.role_label }})
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('auth.change_password') }}">Modifier mon mot de passe</a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="dropdown-item text-danger">Se déconnecter</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="d-flex flex-column flex-lg-row">
+        <nav class="yn-sidebar py-2 no-print" aria-label="Menu principal">
+            <div class="yn-nav-section">Pilotage</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" href="{{ url_for('dashboard.index') }}">
+                        Tableau de bord
+                    </a>
+                </li>
+            </ul>
+
+            <div class="yn-nav-section">Pédagogie & Saisie</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if (request.endpoint or '').startswith('students.') %}active{% endif %}" href="{{ url_for('students.students_list') }}">
+                        Élèves & Inscriptions
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint in ('grades.grade_entry', 'grades.grade_history_view') %}active{% endif %}" href="{{ url_for('grades.grade_entry') }}">
+                        Saisie des notes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'grades.period_observations' %}active{% endif %}" href="{{ url_for('grades.period_observations') }}">
+                        Observations bulletins
+                    </a>
+                </li>
+            </ul>
+
+            <div class="yn-nav-section">États & Impression PDF</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'reports.period_releve' %}active{% endif %}" href="{{ url_for('reports.period_releve') }}">
+                        Relevés de notes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'reports.merit_ranking' %}active{% endif %}" href="{{ url_for('reports.merit_ranking') }}">
+                        Classement de mérite
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'reports.bulletins_center' %}active{% endif %}" href="{{ url_for('reports.bulletins_center') }}">
+                        Bulletins scolaires PDF
+                    </a>
+                </li>
+            </ul>
+
+            <div class="yn-nav-section">Paramétrage scolaire</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'settings.establishment' %}active{% endif %}" href="{{ url_for('settings.establishment') }}">
+                        Établissement & Logo
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint in ('settings.school_years', 'settings.periods') %}active{% endif %}" href="{{ url_for('settings.school_years') }}">
+                        Années & Périodes
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint in ('academics.classes_list', 'academics.class_subjects') %}active{% endif %}" href="{{ url_for('academics.classes_list') }}">
+                        Classes & Matières
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'academics.policies_and_scales' %}active{% endif %}" href="{{ url_for('academics.policies_and_scales') }}">
+                        Barèmes & Appréciations
+                    </a>
+                </li>
+            </ul>
+
+            {% if current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR) %}
+            <div class="yn-nav-section">Sécurité & Maintenance</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.backups_manage' %}active{% endif %}" href="{{ url_for('admin.backups_manage') }}">
+                        Sauvegardes & Restauration
+                    </a>
+                </li>
+                {% if current_user.role == ROLE_ADMIN %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.users_manage' %}active{% endif %}" href="{{ url_for('admin.users_manage') }}">
+                        Comptes utilisateurs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.audit_logs_view' %}active{% endif %}" href="{{ url_for('admin.audit_logs_view') }}">
+                        Journaux & Diagnostic
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+            {% endif %}
+        </nav>
+
+        <main class="yn-main-content flex-grow-1 p-3 p-lg-4">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-3 no-print">
+                    {% for category, msg in messages %}
+                    <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show py-2 mb-2" role="alert">
+                        {{ msg }}
+                        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% else %}
+    <main class="container py-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="mx-auto mb-3" style="max-width: 540px;">
+                {% for category, msg in messages %}
+                <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show py-2" role="alert">
+                    {{ msg }}
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+        {% block guest_content %}{% endblock %}
+    </main>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Barèmes, Calculs & Appréciations{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Règles pédagogiques de calcul & Grille des appréciations</h1>
+        <small class="text-muted">Tous les paramètres de calcul sont définis et validés par l'établissement (§6, §9.3, §22 CdC)</small>
+    </div>
+
+    {% if all_years %}
+    <form method="get" action="{{ url_for('academics.policies_and_scales') }}" class="d-flex flex-wrap align-items-center gap-2">
+        <select name="year_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            {% for yr in all_years %}
+            <option value="{{ yr.id }}" {% if selected_year and selected_year.id == yr.id %}selected{% endif %}>{{ yr.label }}</option>
+            {% endfor %}
+        </select>
+        <select name="class_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            <option value="">Règle générale de l'année entière</option>
+            {% for cls in year_classes %}
+            <option value="{{ cls.id }}" {% if target_class and target_class.id == cls.id %}selected{% endif %}>
+                Règle spécifique : {{ cls.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+
+{% if not selected_year %}
+<div class="alert alert-warning">
+    Veuillez d'abord <a href="{{ url_for('settings.school_years') }}">créer une année scolaire</a>.
+</div>
+{% else %}
+
+{% if scale_warnings %}
+<div class="alert alert-warning">
+    <div class="fw-bold mb-1">Signalement sur la grille d'appréciations actuelle :</div>
+    <ul class="mb-0 small">
+        {% for w in scale_warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('academics.policies_and_scales') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="year_id" value="{{ selected_year.id }}">
+    <input type="hidden" name="class_id" value="{{ target_class.id if target_class else '' }}">
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    1. Paramètres de calcul ({{ target_class.name if target_class else 'Année ' + selected_year.label }})
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="general_average_scale">Barème de la moyenne générale *</label>
+                            <input type="text" id="general_average_scale" name="general_average_scale" class="form-control"
+                                   value="{{ (policy.general_average_scale | compact_fr) if policy else '' }}"
+                                   placeholder="ex. 10 ou 20" required {% if not can_edit %}disabled{% endif %}>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-semibold" for="decimal_places">Nombre de décimales affichées</label>
+                            <select id="decimal_places" name="decimal_places" class="form-select" {% if not can_edit %}disabled{% endif %}>
+                                {% set cur_dec = policy.decimal_places if policy else 2 %}
+                                {% for d in [0, 1, 2, 3] %}
+                                <option value="{{ d }}" {% if cur_dec == d %}selected{% endif %}>{{ d }} décimale(s)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="rounding_mode">Méthode d'arrondi</label>
+                        {% set cur_rnd = policy.rounding_mode if policy else 'ROUND_HALF_UP' %}
+                        <select id="rounding_mode" name="rounding_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
+                            <option value="ROUND_HALF_UP" {% if cur_rnd == 'ROUND_HALF_UP' %}selected{% endif %}>Arrondi commercial au supérieur à 0,5 (ROUND_HALF_UP)</option>
+                            <option value="ROUND_HALF_EVEN" {% if cur_rnd == 'ROUND_HALF_EVEN' %}selected{% endif %}>Arrondi au pair le plus proche (ROUND_HALF_EVEN)</option>
+                            <option value="ROUND_DOWN" {% if cur_rnd == 'ROUND_DOWN' %}selected{% endif %}>Troncature sans arrondi supérieur (ROUND_DOWN)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="absence_policy">Traitement d'une absence (ABS) à une évaluation</label>
+                        {% set cur_abs = policy.absence_policy if policy else 'ZERO' %}
+                        <select id="absence_policy" name="absence_policy" class="form-select" {% if not can_edit %}disabled{% endif %}>
+                            <option value="ZERO" {% if cur_abs == 'ZERO' %}selected{% endif %}>Compter 0 dans la matière (coefficient maintenu)</option>
+                            <option value="NEUTRALIZE" {% if cur_abs == 'NEUTRALIZE' %}selected{% endif %}>Neutraliser la matière et son coefficient</option>
+                            <option value="UNRANKED" {% if cur_abs == 'UNRANKED' %}selected{% endif %}>Marquer l'élève Non classé</option>
+                        </select>
+                        <small class="text-muted">Note : une note non saisie n'est jamais transformée en zéro (dossier signalé incomplet).</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="tie_breaking_mode">Règle de classement des ex æquo</label>
+                        {% set cur_tie = policy.tie_breaking_mode if policy else 'COMPETITION' %}
+                        <select id="tie_breaking_mode" name="tie_breaking_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
+                            <option value="COMPETITION" {% if cur_tie == 'COMPETITION' %}selected{% endif %}>Rang partagé avec saut (1er, 1er ex, 3e)</option>
+                            <option value="DENSE" {% if cur_tie == 'DENSE' %}selected{% endif %}>Rang partagé sans saut (1er, 1er ex, 2e)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="annual_average_mode">Calcul de la moyenne annuelle</label>
+                        {% set cur_ann = policy.annual_average_mode if policy else 'SIMPLE' %}
+                        <select id="annual_average_mode" name="annual_average_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
+                            <option value="SIMPLE" {% if cur_ann == 'SIMPLE' %}selected{% endif %}>Moyenne arithmétique simple des périodes</option>
+                            <option value="WEIGHTED" {% if cur_ann == 'WEIGHTED' %}selected{% endif %}>Moyenne pondérée selon le poids de chaque période</option>
+                        </select>
+                    </div>
+
+                    <div class="form-check">
+                        {% set req_all = policy.annual_require_all_periods if policy else True %}
+                        <input class="form-check-input" type="checkbox" id="annual_require_all_periods" name="annual_require_all_periods"
+                               value="1" {% if req_all %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                        <label class="form-check-label small" for="annual_require_all_periods">
+                            Exiger que toutes les périodes de l'année soient évaluées pour établir le rang annuel
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span>2. Grille des appréciations</span>
+                    {% if can_edit %}
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" id="btn-preset-scale-10" class="btn btn-outline-secondary" title="Pré-remplir une grille indicative sur 10 modifiable">
+                            Exemple /10
+                        </button>
+                        <button type="button" id="btn-preset-scale-20" class="btn btn-outline-secondary" title="Pré-remplir une grille indicative sur 20 modifiable">
+                            Exemple /20
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Convention : chaque intervalle couvre <code>[Borne min ; Borne max[</code> (borne basse incluse, borne haute exclue),
+                        sauf le dernier intervalle supérieur qui inclut la note maximale <code>[Borne min ; Barème]</code>.
+                        Les chevauchements sont bloqués automatiquement.
+                    </p>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Moy. min. (incluse)</th>
+                                    <th>Moy. max.</th>
+                                    <th>Appréciation affichée</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="scale-intervals-tbody">
+                                {% if policy and policy.scale_items %}
+                                    {% for item in policy.scale_items %}
+                                    <tr>
+                                        <td><input type="text" name="scale_min[]" class="form-control form-control-sm" value="{{ item.min_score | compact_fr }}" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td><input type="text" name="scale_max[]" class="form-control form-control-sm" value="{{ item.max_score | compact_fr }}" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td><input type="text" name="scale_label[]" class="form-control form-control-sm" value="{{ item.appreciation }}" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td class="text-end">
+                                            {% if can_edit %}
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-scale-row">Retirer</button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td><input type="text" name="scale_min[]" class="form-control form-control-sm" placeholder="ex. 0" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td><input type="text" name="scale_max[]" class="form-control form-control-sm" placeholder="ex. 5" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td><input type="text" name="scale_label[]" class="form-control form-control-sm" placeholder="ex. Insuffisant" {% if not can_edit %}disabled{% endif %}></td>
+                                        <td class="text-end">
+                                            {% if can_edit %}
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-scale-row">Retirer</button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if can_edit %}
+                    <button type="button" id="btn-add-scale-row" class="btn btn-sm btn-outline-primary">
+                        + Ajouter un intervalle
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if can_edit %}
+    <div class="mt-3 d-flex justify-content-between">
+        <div>
+            {% if target_class and policy %}
+            <button type="submit" name="action" value="delete_override" class="btn btn-outline-danger"
+                    onclick="return confirm('Supprimer la règle spécifique de cette classe et revenir à la règle de l\'année ?');">
+                Supprimer la règle spécifique à {{ target_class.name }}
+            </button>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary px-4">Enregistrer les règles et la grille</button>
+    </div>
+    {% endif %}
+</form>
+{% endif %}
+{% endblock %}

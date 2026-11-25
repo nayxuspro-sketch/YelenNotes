@@ -1,0 +1,28 @@
+# Environnements virtuels et caches Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Compilation PyInstaller
+build/
+dist/
+
+# Données locales d'exécution (toujours séparées du code source)
+var_data/
+instance/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Configuration locale spécifique à un poste (conserver uniquement .example.ini)
+config/yelen_notes.ini
+
+# Fichiers temporaires système
+.DS_Store
+Thumbs.db

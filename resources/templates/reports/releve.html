@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Relevés de notes{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Relevé de notes périodique</h1>
+        <small class="text-muted">Consultable à l'écran, imprimable et exportable en PDF A4 ou Excel (§10 CdC)</small>
+    </div>
+
+    {% if selected_class and selected_period %}
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">Imprimer cette vue</button>
+        <a href="{{ url_for('reports.period_releve_pdf', class_id=selected_class.id, period_id=selected_period.id, inline=1) }}"
+           target="_blank" class="btn btn-sm btn-outline-primary">
+            Aperçu PDF A4
+        </a>
+        <a href="{{ url_for('reports.period_releve_pdf', class_id=selected_class.id, period_id=selected_period.id) }}"
+           class="btn btn-sm btn-primary">
+            Télécharger PDF
+        </a>
+        <a href="{{ url_for('reports.period_releve_excel', class_id=selected_class.id, period_id=selected_period.id) }}"
+           class="btn btn-sm btn-outline-success">
+            Exporter Excel (.xlsx)
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card mb-3 no-print">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for('reports.period_releve') }}" class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for cls in classes %}
+                    <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>
+                        Classe {{ cls.name }} ({{ cls.titulaire_name }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for p in periods %}
+                    <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>
+                        {{ p.name }} ({{ p.status }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if results %}
+<div class="card">
+    <div class="card-body">
+        <!-- En-tête officiel du relevé -->
+        <div class="row align-items-center border-bottom pb-2 mb-3 text-center">
+            <div class="col-4 small">
+                <div class="fw-bold text-uppercase">{{ settings.country }}</div>
+                <div class="fst-italic">{{ settings.motto }}</div>
+                {% if settings.ceb %}<div>CEB : {{ settings.ceb }}</div>{% endif %}
+            </div>
+            <div class="col-4">
+                {% if settings.logo_filename %}
+                <img src="{{ url_for('settings.school_logo') }}" alt="Logo" style="max-height: 60px;">
+                {% endif %}
+            </div>
+            <div class="col-4 small">
+                <div class="fw-bold">{{ settings.school_name or 'Établissement scolaire' }}</div>
+                {% if settings.locality %}<div>{{ settings.locality }}</div>{% endif %}
+                <div class="fw-semibold">Année scolaire : {{ results.academic_class.school_year.label }}</div>
+            </div>
+        </div>
+
+        <div class="text-center mb-3">
+            <h2 class="h5 fw-bold mb-1">RELEVÉ DE NOTES — {{ results.academic_class.name }} — {{ results.period.name }}</h2>
+            <div class="small text-muted">
+                Effectif actif : <strong>{{ results.active_count }}</strong> ({{ results.girls_count }} F / {{ results.boys_count }} M) •
+                Classés : <strong>{{ results.ranked_count }}</strong> •
+                Moyenne de la classe : <strong>{{ results.class_average | dec_fr(results.decimal_places) }} /{{ results.general_scale | compact_fr }}</strong>
+                (Min : {{ results.min_average | dec_fr(results.decimal_places) }} | Max : {{ results.max_average | dec_fr(results.decimal_places) }})
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle mb-3">
+                <thead>
+                    <tr>
+                        <th class="text-center">N°</th>
+                        <th>Nom et Prénoms</th>
+                        <th class="text-center">S</th>
+                        {% for subj in results.subjects %}
+                        <th class="text-center">
+                            {{ subj.short_label or subj.name }}<br>
+                            <small class="fw-normal text-muted">/{{ subj.max_score | compact_fr }} (c.{{ subj.coefficient | compact_fr }})</small>
+                        </th>
+                        {% endfor %}
+                        <th class="text-center">Coef.</th>
+                        <th class="text-center">Total Pts</th>
+                        <th class="text-center">Moy. /{{ results.general_scale | compact_fr }}</th>
+                        <th class="text-center">Rang</th>
+                        <th class="text-center">Appréciation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results.active_rows %}
+                    <tr>
+                        <td class="text-center">{{ row.enrollment.roll_number }}</td>
+                        <td class="fw-semibold">{{ row.enrollment.student.full_name }}</td>
+                        <td class="text-center">{{ row.enrollment.student.sex }}</td>
+                        {% for subj in results.subjects %}
+                        <td class="text-center">{{ row.subject_cells[subj.id].display_raw }}</td>
+                        {% endfor %}
+                        <td class="text-center">{{ row.total_coefficients | compact_fr if row.is_rankable else '—' }}</td>
+                        <td class="text-center">{{ row.total_weighted_points | dec_fr(results.decimal_places) if row.is_rankable else '—' }}</td>
+                        <td class="text-center fw-bold">{{ row.display_average }}</td>
+                        <td class="text-center fw-semibold">{{ row.rank_label }}</td>
+                        <td class="text-center small">{{ row.appreciation if row.is_rankable else row.unranked_reason }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if results.subjects and results.active_rows %}
+                    <tr class="table-light fw-bold">
+                        <td></td>
+                        <td>Moyenne par matière (sur barème réf.)</td>
+                        <td></td>
+                        {% for subj in results.subjects %}
+                        <td class="text-center">
+                            {{ results.subject_stats[subj.id].average_on_ref | dec_fr(results.decimal_places) }}
+                        </td>
+                        {% endfor %}
+                        <td></td>
+                        <td></td>
+                        <td class="text-center">{{ results.class_average | dec_fr(results.decimal_places) }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row mt-4 small text-center">
+            <div class="col-6">
+                <div class="fw-bold">Le / La Titulaire de la classe</div>
+                <div class="mt-4">{{ results.academic_class.titulaire_name }}</div>
+            </div>
+            <div class="col-6">
+                <div class="fw-bold">{{ results.academic_class.director_title }}</div>
+                <div class="mt-4">{{ results.academic_class.director_name }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">Sélectionnez une classe et une période pour consulter le relevé de notes.</div>
+{% endif %}
+{% endblock %}

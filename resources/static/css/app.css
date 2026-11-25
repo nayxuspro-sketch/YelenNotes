@@ -1,0 +1,204 @@
+/* ==========================================================================
+   YELEN NOTES — Feuille de style locale (Écran & Impression A4)
+   100 % hors ligne — aucune police ou ressource distante
+   ========================================================================== */
+
+:root {
+    --yn-navy: #163a5f;
+    --yn-navy-dark: #0f2944;
+    --yn-accent: #1f5f8b;
+    --yn-gold: #d99b26;
+    --yn-bg: #f4f6f9;
+    --yn-border: #dce2ea;
+    --yn-text: #1e293b;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif;
+    background-color: var(--yn-bg);
+    color: var(--yn-text);
+    font-size: 0.94rem;
+}
+
+/* Barre supérieure */
+.yn-topbar {
+    background: linear-gradient(90deg, var(--yn-navy-dark) 0%, var(--yn-navy) 100%);
+    color: #ffffff;
+    border-bottom: 3px solid var(--yn-gold);
+}
+
+.yn-brand-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background-color: var(--yn-gold);
+    color: var(--yn-navy-dark);
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+
+/* Menu latéral sobre et lisible sur écrans 1366x768 */
+.yn-sidebar {
+    width: 245px;
+    min-height: calc(100vh - 58px);
+    background-color: #ffffff;
+    border-right: 1px solid var(--yn-border);
+    flex-shrink: 0;
+}
+
+.yn-nav-section {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    padding: 0.85rem 1rem 0.3rem;
+}
+
+.yn-sidebar .nav-link {
+    color: #334155;
+    padding: 0.52rem 1rem;
+    border-left: 3px solid transparent;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.yn-sidebar .nav-link:hover {
+    background-color: #f1f5f9;
+    color: var(--yn-navy);
+}
+
+.yn-sidebar .nav-link.active {
+    background-color: #e8f1f8;
+    color: var(--yn-navy);
+    border-left-color: var(--yn-navy);
+    font-weight: 600;
+}
+
+/* Cartes et tableaux */
+.card {
+    border: 1px solid var(--yn-border);
+    box-shadow: 0 1px 2px rgba(15, 41, 68, 0.04);
+}
+
+.card-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid var(--yn-border);
+    font-weight: 600;
+}
+
+.table thead th {
+    background-color: #eef2f6;
+    color: #1e293b;
+    font-weight: 600;
+    font-size: 0.84rem;
+    vertical-align: middle;
+    border-bottom-width: 2px;
+}
+
+/* Grille de saisie des notes */
+.grade-input {
+    width: 82px;
+    text-align: center;
+    font-weight: 600;
+    padding: 0.28rem 0.4rem;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.grade-input:focus {
+    outline: none;
+    border-color: var(--yn-accent);
+    box-shadow: 0 0 0 3px rgba(31, 95, 139, 0.18);
+    background-color: #fffef5;
+}
+
+.grade-input.is-saving {
+    background-color: #fef9c3;
+    border-color: #eab308;
+}
+
+.grade-input.is-saved {
+    background-color: #f0fdf4;
+    border-color: #16a34a;
+}
+
+.grade-input.is-invalid-grade {
+    background-color: #fef2f2;
+    border-color: #dc2626 !important;
+    color: #991b1b;
+}
+
+.grade-input.is-special {
+    background-color: #f1f5f9;
+    color: #475569;
+    font-style: italic;
+}
+
+/* Bannière de démonstration bien visible */
+.yn-demo-strip {
+    background-color: #fffbeb;
+    border-bottom: 2px solid #f59e0b;
+    color: #92400e;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.35rem 1rem;
+    text-align: center;
+}
+
+/* Aperçu feuille A4 à l'écran */
+.yn-paper-preview {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    padding: 1.5rem;
+    max-width: 920px;
+    margin: 0 auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 991.98px) {
+    .yn-sidebar {
+        width: 100%;
+        min-height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--yn-border);
+    }
+}
+
+/* Mise en page propre pour l'impression directe navigateur */
+@media print {
+    body {
+        background: #ffffff !important;
+        font-size: 11pt;
+        color: #000000 !important;
+    }
+    .yn-topbar,
+    .yn-sidebar,
+    .yn-demo-strip,
+    .no-print,
+    .alert-dismissible .btn-close {
+        display: none !important;
+    }
+    .yn-main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+    .card,
+    .yn-paper-preview {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    .table th,
+    .table td {
+        border-color: #333333 !important;
+    }
+}

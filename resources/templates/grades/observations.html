@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Observations des bulletins{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Observations, mentions et décisions des bulletins</h1>
+        <small class="text-muted">Appréciations personnalisées du titulaire et visa de la direction (§12.1, §12.3 CdC)</small>
+    </div>
+
+    <form method="get" action="{{ url_for('grades.period_observations') }}" class="d-flex flex-wrap gap-2">
+        <select name="class_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            {% for cls in classes %}
+            <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>{{ cls.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="scope" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            <option value="PERIODE" {% if scope == 'PERIODE' %}selected{% endif %}>Bulletin périodique</option>
+            <option value="ANNUEL" {% if scope == 'ANNUEL' %}selected{% endif %}>Bulletin annuel</option>
+        </select>
+        {% if scope == 'PERIODE' %}
+        <select name="period_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+            {% for p in periods %}
+            <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </form>
+</div>
+
+{% if selected_class %}
+<form method="post" action="{{ url_for('grades.period_observations') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="class_id" value="{{ selected_class.id }}">
+    <input type="hidden" name="scope" value="{{ scope }}">
+    {% if selected_period %}<input type="hidden" name="period_id" value="{{ selected_period.id }}">{% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                Classe <strong>{{ selected_class.name }}</strong> —
+                {{ 'Bilan annuel' if scope == 'ANNUEL' else (selected_period.name if selected_period else '') }}
+            </span>
+            {% if can_edit %}
+            <button type="submit" class="btn btn-sm btn-primary">Enregistrer les observations</button>
+            {% endif %}
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">N°</th>
+                        <th style="min-width: 190px;">Élève</th>
+                        <th>Observation du Titulaire</th>
+                        <th>Observation de la Direction</th>
+                        <th style="width: 170px;">Mention / Distinction</th>
+                        {% if scope == 'ANNUEL' %}
+                        <th style="width: 160px;">Décision fin d'année</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for enr in active_enrollments %}
+                    {% set ob = obs_by_enrollment.get(enr.id) %}
+                    <tr>
+                        <td>{{ enr.roll_number }}</td>
+                        <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                        <td>
+                            <input type="text" name="t_obs_{{ enr.id }}" class="form-control form-control-sm"
+                                   value="{{ ob.teacher_observation if ob and ob.teacher_observation else '' }}"
+                                   {% if not can_edit %}disabled{% endif %}>
+                        </td>
+                        <td>
+                            <input type="text" name="d_obs_{{ enr.id }}" class="form-control form-control-sm"
+                                   value="{{ ob.director_observation if ob and ob.director_observation else '' }}"
+                                   {% if not can_edit or current_user.role not in (ROLE_ADMIN, ROLE_DIRECTEUR) %}disabled{% endif %}>
+                        </td>
+                        <td>
+                            <input type="text" name="mention_{{ enr.id }}" class="form-control form-control-sm"
+                                   value="{{ ob.honors_mention if ob and ob.honors_mention else '' }}"
+                                   placeholder="ex. Tableau d'honneur" {% if not can_edit %}disabled{% endif %}>
+                        </td>
+                        {% if scope == 'ANNUEL' %}
+                        <td>
+                            <input type="text" name="decision_{{ enr.id }}" class="form-control form-control-sm"
+                                   value="{{ enr.annual_decision or '' }}" placeholder="ex. Admis en CM2"
+                                   {% if not can_edit or current_user.role not in (ROLE_ADMIN, ROLE_DIRECTEUR) %}disabled{% endif %}>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</form>
+{% endif %}
+{% endblock %}
