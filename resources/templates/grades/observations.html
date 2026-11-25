@@ -50,7 +50,14 @@
                 <thead>
                     <tr>
                         <th style="width: 50px;">N°</th>
-                        <th style="min-width: 190px;">Élève</th>
+                        <th style="min-width: 185px;">Élève</th>
+                        <th class="text-center" style="min-width: 145px;">
+                            {% if scope == 'ANNUEL' %}
+                                Moyenne annuelle{% if computed_results %} /{{ computed_results.general_scale | compact_fr }}{% endif %}
+                            {% else %}
+                                Moyenne période{% if computed_results %} /{{ computed_results.general_scale | compact_fr }}{% endif %}
+                            {% endif %}
+                        </th>
                         <th>Observation du Titulaire</th>
                         <th>Observation de la Direction</th>
                         <th style="width: 170px;">Mention / Distinction</th>
@@ -62,9 +69,33 @@
                 <tbody>
                     {% for enr in active_enrollments %}
                     {% set ob = obs_by_enrollment.get(enr.id) %}
+                    {% set st_res = student_results_by_enrollment.get(enr.id) %}
                     <tr>
                         <td>{{ enr.roll_number }}</td>
                         <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                        <td class="text-center">
+                            {% if st_res %}
+                                {% if scope == 'ANNUEL' %}
+                                    {% if st_res.is_rankable %}
+                                    <div class="fw-bold text-primary">{{ st_res.display_annual_average }}</div>
+                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} • {{ st_res.appreciation }}{% endif %}</div>
+                                    {% else %}
+                                    <span class="badge text-bg-secondary" title="{{ st_res.unranked_reason }}">{{ st_res.display_annual_average }}</span>
+                                    <div class="small text-muted">{{ st_res.unranked_reason }}</div>
+                                    {% endif %}
+                                {% else %}
+                                    {% if st_res.is_rankable %}
+                                    <div class="fw-bold text-primary">{{ st_res.display_average }}</div>
+                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} • {{ st_res.appreciation }}{% endif %}</div>
+                                    {% else %}
+                                    <span class="badge text-bg-secondary" title="{{ st_res.unranked_reason }}">{{ st_res.display_average }}</span>
+                                    <div class="small text-muted">{{ st_res.unranked_reason }}</div>
+                                    {% endif %}
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <input type="text" name="t_obs_{{ enr.id }}" class="form-control form-control-sm"
                                    value="{{ ob.teacher_observation if ob and ob.teacher_observation else '' }}"
@@ -89,7 +120,7 @@
                         {% endif %}
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
+                    <tr><td colspan="7" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
