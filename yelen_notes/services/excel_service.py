@@ -254,7 +254,7 @@ def export_students_to_excel(academic_class: AcademicClass, include_inactive: bo
             f"(Âge calculé au {ref_date.strftime('%d/%m/%Y')})"
         ]
     )
-    ws.merge_cells("A1:J1")
+    ws.merge_cells("A1:K1")
     ws["A1"].font = Font(name="Calibri", size=12, bold=True)
 
     headers = [
@@ -285,6 +285,8 @@ def export_students_to_excel(academic_class: AcademicClass, include_inactive: bo
 
     for enr in enrollments:
         st = enr.student
+        age_years = st.age_at(ref_date)
+        age_label = f"{age_years} an" if age_years <= 1 else f"{age_years} ans"
         row_vals = [
             enr.roll_number,
             st.unique_code,
@@ -292,7 +294,7 @@ def export_students_to_excel(academic_class: AcademicClass, include_inactive: bo
             st.first_names,
             st.sex,
             st.birth_date.strftime("%d/%m/%Y"),
-            st.age_at(ref_date),
+            age_label,
             enr.schooling_status or "",
             enr.repeated_class_detail or "",
             "Actif" if enr.is_active else "Inactif",

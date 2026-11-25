@@ -79,6 +79,12 @@ def test_excel_import_duplicate_detection_and_export(app, configured_school):
 
         exported = export_students_to_excel(cm2)
         assert exported[:2] == b"PK"  # signature ZIP/XLSX valide
+        from openpyxl import load_workbook
+
+        wb_exp = load_workbook(io.BytesIO(exported))
+        ws_exp = wb_exp.active
+        assert ws_exp.cell(row=2, column=7).value == "Âge"
+        assert str(ws_exp.cell(row=3, column=7).value).endswith(" ans")
 
 
 def test_pdf_and_excel_reports_generation_and_multiyear_historization(app, configured_school):
