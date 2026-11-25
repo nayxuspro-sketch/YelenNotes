@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Journaux de sécurité & Diagnostic{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Journaux d'audit et diagnostic technique</h1>
+        <small class="text-muted">Traçabilité des opérations sensibles et état du serveur local (§8 Arch & §17 CdC)</small>
+    </div>
+</div>
+
+<!-- Bloc diagnostic système et multiposte -->
+<div class="card mb-4">
+    <div class="card-header">Informations techniques et répertoires</div>
+    <div class="card-body small">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div><strong>Version application :</strong> v{{ app_version }} (Schéma v{{ schema_version }})</div>
+                <div><strong>Mode serveur actif :</strong> {{ server_mode | upper }}</div>
+                <div><strong>Journal SQLite :</strong> <code>{{ journal_mode }}</code> • Intégrité : <strong>{{ db_msg | upper }}</strong></div>
+                {% if lan_ips %}
+                <div class="mt-1">
+                    <strong>Adresse(s) réseau local pour postes clients (multiposte) :</strong>
+                    {% for ip in lan_ips %}
+                        <code>http://{{ ip }}:5000</code>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <div><strong>Dossier programme :</strong> <code>{{ paths.program_root }}</code></div>
+                <div><strong>Dossier données indépendant :</strong> <code>{{ paths.data_dir }}</code></div>
+                <div><strong>Fichier SQLite :</strong> <code>{{ paths.db_path }}</code></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span>Journal des opérations sensibles ({{ logs | length }} dernières entrées)</span>
+        <form method="get" action="{{ url_for('admin.audit_logs_view') }}" class="d-flex gap-2">
+            <select name="action" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">— Toutes les actions —</option>
+                {% for act in distinct_actions %}
+                <option value="{{ act }}" {% if action_filter == act %}selected{% endif %}>{{ act }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Horodatage (UTC)</th>
+                    <th>Utilisateur</th>
+                    <th>Profil</th>
+                    <th>IP</th>
+                    <th>Action</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lg in logs %}
+                <tr>
+                    <td class="small text-nowrap">{{ lg.created_at | datetime_fr }}</td>
+                    <td><code>{{ lg.username_snapshot }}</code></td>
+                    <td class="small">{{ lg.role_snapshot or '—' }}</td>
+                    <td class="small text-muted">{{ lg.ip_address or '—' }}</td>
+                    <td><span class="badge text-bg-light border text-dark">{{ lg.action }}</span></td>
+                    <td class="small">{{ lg.summary }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-4 text-muted">Aucune entrée dans le journal.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

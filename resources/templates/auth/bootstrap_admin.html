@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Première initialisation{% endblock %}
+
+{% block guest_content %}
+<div class="card mx-auto shadow-sm" style="max-width: 580px;">
+    <div class="card-header py-3 bg-white">
+        <div class="d-flex align-items-center gap-2">
+            <span class="yn-brand-badge">YN</span>
+            <div>
+                <h1 class="h5 mb-0 fw-bold">Yelen Notes — Première mise en service</h1>
+                <small class="text-muted">Base vierge prête à être configurée par l'établissement</small>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-4">
+        <div class="alert alert-info small">
+            Aucun compte utilisateur n'existe encore dans cette base de données. Créez le compte
+            <strong>Administrateur</strong> initial de l'école. Vous pourrez ensuite paramétrer librement
+            l'année scolaire, les périodes, les barèmes, les classes et les matières.
+        </div>
+
+        <form method="post" action="{{ url_for('auth.bootstrap_admin') }}" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <h2 class="h6 fw-bold text-secondary mb-3">1. Compte Administrateur</h2>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" for="username">Identifiant de connexion *</label>
+                <input type="text" class="form-control" id="username" name="username" required minlength="3"
+                       value="{{ form_data.get('username', 'admin') }}" placeholder="ex. admin">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" for="full_name">Nom et prénoms du responsable *</label>
+                <input type="text" class="form-control" id="full_name" name="full_name" required
+                       value="{{ form_data.get('full_name', '') }}" placeholder="ex. OUÉDRAOGO Souleymane">
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6">
+                    <label class="form-label fw-semibold" for="password">Mot de passe (min. 8 caractères) *</label>
+                    <input type="password" class="form-control" id="password" name="password" required minlength="8">
+                </div>
+                <div class="col-sm-6">
+                    <label class="form-label fw-semibold" for="confirm_password">Confirmer le mot de passe *</label>
+                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" required minlength="8">
+                </div>
+            </div>
+
+            <h2 class="h6 fw-bold text-secondary mb-3">2. Identité de l'école (modifiable à tout moment)</h2>
+            <div class="mb-3">
+                <label class="form-label" for="school_name">Nom de l'établissement (facultatif à cette étape)</label>
+                <input type="text" class="form-control" id="school_name" name="school_name"
+                       value="{{ form_data.get('school_name', '') }}" placeholder="ex. École Primaire Publique de Tanghin">
+            </div>
+            <div class="mb-4">
+                <label class="form-label" for="ceb">Circonscription d'Éducation de Base — CEB (facultatif)</label>
+                <input type="text" class="form-control" id="ceb" name="ceb"
+                       value="{{ form_data.get('ceb', '') }}" placeholder="ex. CEB de Ouagadougou III">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                Créer le compte administrateur et démarrer
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Matières — {{ academic_class.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Matières et barèmes — Classe {{ academic_class.name }} ({{ academic_class.school_year.label }})</h1>
+        <small class="text-muted">
+            Titulaire : {{ academic_class.titulaire_name }} •
+            {% if policy %}
+                Barème général de la classe : <strong>/{{ policy.general_average_scale | compact_fr }}</strong>
+            {% else %}
+                <span class="text-warning fw-semibold">Pensez à définir le barème général dans « Barèmes & Appréciations »</span>
+            {% endif %}
+        </small>
+    </div>
+    <a href="{{ url_for('academics.classes_list', year_id=academic_class.school_year_id) }}" class="btn btn-sm btn-outline-secondary">
+        ← Retour aux classes
+    </a>
+</div>
+
+<div class="row g-4">
+    {% if can_edit %}
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">Ajouter une matière</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('academics.class_subjects', class_id=academic_class.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="name">Intitulé de la matière *</label>
+                        <input type="text" id="name" name="name" class="form-control" required placeholder="ex. Opérations & Problèmes">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="form-label" for="short_label">Abréviation (relevés)</label>
+                            <input type="text" id="short_label" name="short_label" class="form-control" placeholder="ex. Maths">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label" for="display_order">Ordre</label>
+                            <input type="number" id="display_order" name="display_order" class="form-control" min="1" value="{{ (subjects | length) + 1 }}">
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" for="min_score">Note min. *</label>
+                            <input type="text" id="min_score" name="min_score" class="form-control" value="0" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" for="max_score">Note max. *</label>
+                            <input type="text" id="max_score" name="max_score" class="form-control" value="{{ default_ref_scale | compact_fr }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" for="reference_scale">Moyenne sur *</label>
+                            <input type="text" id="reference_scale" name="reference_scale" class="form-control" value="{{ default_ref_scale | compact_fr }}" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" for="coefficient">Coefficient *</label>
+                            <input type="text" id="coefficient" name="coefficient" class="form-control" value="1" required>
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="include_in_average" name="include_in_average" value="1" checked>
+                        <label class="form-check-label small" for="include_in_average">Inclure dans le calcul de la moyenne générale</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="allow_exemption" name="allow_exemption" value="1" checked>
+                        <label class="form-check-label small" for="allow_exemption">Autoriser la dispense (DISP) dans cette matière</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Ajouter la matière</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="col-lg-{% if can_edit %}8{% else %}12{% endif %}">
+        <div class="card">
+            <div class="card-header">Matières configurées ({{ subjects | length }})</div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Matière</th>
+                            <th class="text-center">Bornes saisie</th>
+                            <th class="text-center">Moyenne sur</th>
+                            <th class="text-center">Coef.</th>
+                            <th class="text-center">Options</th>
+                            {% if can_edit %}<th class="text-end">Modifier</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in subjects %}
+                        <tr>
+                            <td>{{ s.display_order }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ s.name }}</div>
+                                {% if s.short_label %}<small class="text-muted">Abrév. : {{ s.short_label }}</small>{% endif %}
+                                {% if not s.is_active %}<span class="badge text-bg-secondary ms-1">Inactive</span>{% endif %}
+                            </td>
+                            <td class="text-center">{{ s.min_score | compact_fr }} à {{ s.max_score | compact_fr }}</td>
+                            <td class="text-center">/{{ s.reference_scale | compact_fr }}</td>
+                            <td class="text-center fw-bold">{{ s.coefficient | compact_fr }}</td>
+                            <td class="text-center small">
+                                {% if s.include_in_average %}<span class="badge text-bg-light border text-dark">Moyenne</span>{% endif %}
+                                {% if s.allow_exemption %}<span class="badge text-bg-light border text-dark">Disp. autorisée</span>{% endif %}
+                            </td>
+                            {% if can_edit %}
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#editSubj{{ s.id }}">
+                                    Éditer
+                                </button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% if can_edit %}
+                        <tr class="collapse bg-light" id="editSubj{{ s.id }}">
+                            <td colspan="7">
+                                <form method="post" action="{{ url_for('academics.update_subject', subject_id=s.id) }}" class="row g-2 align-items-end p-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="col-md-3">
+                                        <label class="form-label small">Matière</label>
+                                        <input type="text" name="name" class="form-control form-control-sm" value="{{ s.name }}" required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">Abrév.</label>
+                                        <input type="text" name="short_label" class="form-control form-control-sm" value="{{ s.short_label or '' }}">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label small">Min</label>
+                                        <input type="text" name="min_score" class="form-control form-control-sm" value="{{ s.min_score | compact_fr }}">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label small">Max</label>
+                                        <input type="text" name="max_score" class="form-control form-control-sm" value="{{ s.max_score | compact_fr }}">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label small">Sur</label>
+                                        <input type="text" name="reference_scale" class="form-control form-control-sm" value="{{ s.reference_scale | compact_fr }}">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label small">Coef</label>
+                                        <input type="text" name="coefficient" class="form-control form-control-sm" value="{{ s.coefficient | compact_fr }}">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <label class="form-label small">Ordre</label>
+                                        <input type="number" name="display_order" class="form-control form-control-sm" value="{{ s.display_order }}">
+                                    </div>
+                                    <div class="col-md-2 text-end">
+                                        <button type="submit" class="btn btn-sm btn-primary w-100">Valider</button>
+                                    </div>
+                                    <div class="col-12 d-flex gap-3 small mt-1">
+                                        <label><input type="checkbox" name="include_in_average" value="1" {% if s.include_in_average %}checked{% endif %}> Prise en compte moyenne</label>
+                                        <label><input type="checkbox" name="allow_exemption" value="1" {% if s.allow_exemption %}checked{% endif %}> Dispense autorisée</label>
+                                        <label><input type="checkbox" name="is_active" value="1" {% if s.is_active %}checked{% endif %}> Matière active</label>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">Aucune matière configurée pour cette classe.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Historique des modifications de notes{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Historique des saisies et corrections de notes</h1>
+        <small class="text-muted">Traçabilité complète : auteur, date/heure, ancienne et nouvelle valeur (§8.2 CdC)</small>
+    </div>
+    <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id if selected_class else None, period_id=selected_period.id if selected_period else None) }}"
+       class="btn btn-sm btn-outline-secondary">
+        ← Retour à la grille de saisie
+    </a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for('grades.grade_history_view') }}" class="row g-2 align-items-center">
+            <div class="col-md-4">
+                <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for cls in classes %}
+                    <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>{{ cls.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for p in periods %}
+                    <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Date & heure (UTC)</th>
+                    <th>Auteur</th>
+                    <th>Élève</th>
+                    <th>Matière</th>
+                    <th>Ancienne valeur</th>
+                    <th>Nouvelle valeur</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in entries %}
+                {% set enr = enr_lookup.get(h.enrollment_id) %}
+                {% set subj = subj_lookup.get(h.subject_id) %}
+                <tr>
+                    <td class="small">{{ h.changed_at | datetime_fr }}</td>
+                    <td><code>{{ h.changed_by_username }}</code></td>
+                    <td class="fw-semibold">{{ enr.student.full_name if enr else h.enrollment_id }}</td>
+                    <td>{{ subj.name if subj else h.subject_id }}</td>
+                    <td class="text-muted">
+                        {% if h.old_status == 'NUMERIQUE' %}{{ h.old_value | compact_fr }}{% else %}{{ h.old_status or '—' }}{% endif %}
+                    </td>
+                    <td class="fw-bold">
+                        {% if h.new_status == 'NUMERIQUE' %}{{ h.new_value | compact_fr }}{% else %}{{ h.new_status }}{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">Aucune modification enregistrée pour cette sélection.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
