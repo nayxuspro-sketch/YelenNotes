@@ -77,8 +77,8 @@
             <table class="table table-bordered align-middle">
                 <thead>
                     <tr>
-                        <th class="text-center" style="width: 95px;">Rang</th>
                         <th class="text-center" style="width: 60px;">N°</th>
+                        <th class="text-center" style="width: 95px;">Rang</th>
                         <th>Nom</th>
                         <th>Prénoms</th>
                         <th class="text-center" style="width: 60px;">Sexe</th>
@@ -94,8 +94,8 @@
                 <tbody>
                     {% for row in res.ranked_rows %}
                     <tr>
+                        <td class="text-center">{{ loop.index }}</td>
                         <td class="text-center fw-bold">{{ row.rank_label }}</td>
-                        <td class="text-center">{{ row.enrollment.roll_number }}</td>
                         <td class="fw-semibold">{{ row.enrollment.student.last_name }}</td>
                         <td>{{ row.enrollment.student.first_names }}</td>
                         <td class="text-center">{{ row.enrollment.student.sex }}</td>

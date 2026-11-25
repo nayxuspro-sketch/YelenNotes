@@ -517,8 +517,8 @@ def generate_merit_ranking_pdf(
     )
 
     headers = [
-        Paragraph("<b>Rang</b>", styles["cell_bold_center"]),
         Paragraph("<b>N°</b>", styles["cell_bold_center"]),
+        Paragraph("<b>Rang</b>", styles["cell_bold_center"]),
         Paragraph("<b>Nom</b>", styles["cell_bold"]),
         Paragraph("<b>Prénoms</b>", styles["cell_bold"]),
         Paragraph("<b>Sexe</b>", styles["cell_bold_center"]),
@@ -529,13 +529,13 @@ def generate_merit_ranking_pdf(
         Paragraph("<b>Appréciation</b>", styles["cell_bold_center"]),
     ]
     data = [headers]
-    for row in results.ranked_rows:
+    for idx, row in enumerate(results.ranked_rows, start=1):
         st = row.enrollment.student
         avg_disp = row.display_annual_average if is_annual else row.display_average  # type: ignore[union-attr]
         data.append(
             [
+                Paragraph(str(idx), styles["cell_center"]),
                 Paragraph(f"<b>{_safe(row.rank_label)}</b>", styles["cell_bold_center"]),
-                Paragraph(str(row.enrollment.roll_number), styles["cell_center"]),
                 Paragraph(_safe(st.last_name), styles["cell"]),
                 Paragraph(_safe(st.first_names), styles["cell"]),
                 Paragraph(st.sex, styles["cell_center"]),
@@ -545,8 +545,8 @@ def generate_merit_ranking_pdf(
         )
 
     col_widths = [
-        20 * mm,
         12 * mm,
+        20 * mm,
         42 * mm,
         50 * mm,
         13 * mm,
