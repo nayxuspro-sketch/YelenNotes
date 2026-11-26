@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% block title %}Gestion des rôles et permissions (RBAC){% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Administration — Gestion centralisée des rôles et permissions (RBAC)</h1>
+        <small class="text-muted">
+            Principe du moindre privilège • Refus par défaut (Default Deny) • Effet immédiat • Traçabilité complète (§1–§11 RBAC)
+        </small>
+    </div>
+    <div class="d-flex gap-2">
+        {% if can_perm('users.view') %}
+        <a href="{{ url_for('admin.users_manage') }}" class="btn btn-sm btn-outline-primary">
+            Comptes utilisateurs
+        </a>
+        {% endif %}
+        {% if can_perm('audit.export') %}
+        <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-success">
+            Exporter journal d'audit (.csv)
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Navigation des 5 sous-espaces RBAC (§10) -->
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'roles' %}active fw-semibold{% endif %}"
+           href="{{ url_for('rbac_admin.index', tab='roles', role_id=selected_role.id if selected_role else None) }}">
+            1. Rôles ({{ roles | length }})
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'matrix' %}active fw-semibold{% endif %}"
+           href="{{ url_for('rbac_admin.index', tab='matrix', role_id=selected_role.id if selected_role else None) }}">
+            2. Matrice des permissions
+        </a>
+    </li>
+    {% if can_perm('users.view') %}
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'users' %}active fw-semibold{% endif %}"
+           href="{{ url_for('rbac_admin.index', tab='users') }}">
+            3. Utilisateurs & Droits effectifs ({{ scoped_users | length }})
+        </a>
+    </li>
+    {% endif %}
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'establishments' %}active fw-semibold{% endif %}"
+           href="{{ url_for('rbac_admin.index', tab='establishments') }}">
+            4. Établissements ({{ establishments | length }})
+        </a>
+    </li>
+    {% if can_perm('audit.view') %}
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'audit' %}active fw-semibold{% endif %}"
+           href="{{ url_for('rbac_admin.index', tab='audit') }}">
+            5. Journal RBAC & Sécurité
+        </a>
+    </li>
+    {% endif %}
+</ul>
+
+{% if active_tab == 'roles' %}
+<div class="row g-4">
+    {% if can_create_rbac %}
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header fw-semibold">Créer un rôle personnalisé</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('rbac_admin.create_role_route') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Nom du rôle *</label>
+                        <input type="text" name="name" class="form-control form-control-sm" required placeholder="ex. Censeur pédagogique">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Code technique unique *</label>
+                        <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. CENSEUR_PEDAGOGIQUE">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Description métier *</label>
+                        <textarea name="description" class="form-control form-control-sm" rows="2"
+                                  placeholder="Décrivez précisément le périmètre et les responsabilités de ce rôle"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Copier initialement les permissions d'un rôle (facultatif)</label>
+                        <select name="copy_from_role_id" class="form-select form-select-sm">
+                            <option value="">— Partir de zéro (aucune permission par défaut) —</option>
+                            {% for r in roles %}
+                            {% if user_is_super_admin or r.code != 'SUPER_ADMIN' %}
+                            <option value="{{ r.id }}">{{ r.name }} ({{ r.code }})</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer et configurer dans la matrice</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="{{ 'col-xl-8' if can_create_rbac else 'col-12' }}">
+        <div class="card">
+            <div class="card-header fw-semibold">Catalogue des rôles du système</div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Rôle & Code</th>
+                            <th>Description</th>
+                            <th class="text-center">Permissions</th>
+                            <th class="text-center">Utilisateurs</th>
+                            <th class="text-center">Statut</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in roles %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ r.name }}</div>
+                                <code>{{ r.code }}</code>
+                                {% if r.is_system %}
+                                <span class="badge text-bg-light border text-muted ms-1">Prédéfini</span>
+                                {% endif %}
+                            </td>
+                            <td class="small text-muted" style="max-width: 280px;">
+                                {{ r.description or '—' }}
+                                <div style="font-size: 0.72rem;" class="mt-1">
+                                    MAJ : {{ r.updated_at | datetime_fr }}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                {% if r.code == 'SUPER_ADMIN' %}
+                                <span class="badge text-bg-dark">Toutes</span>
+                                {% else %}
+                                <span class="badge text-bg-primary">{{ r.role_permissions | length }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="fw-semibold">{{ role_user_counts.get(r.id, 0) }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if r.is_active %}
+                                <span class="badge text-bg-success">Actif</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary">Inactif</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="d-inline-flex gap-1">
+                                    <a href="{{ url_for('rbac_admin.index', tab='matrix', role_id=r.id) }}"
+                                       class="btn btn-sm btn-outline-primary">
+                                        Matrice
+                                    </a>
+                                    {% if can_update_rbac and (user_is_super_admin or r.code != 'SUPER_ADMIN') %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            data-bs-toggle="collapse" data-bs-target="#editRole{{ r.id }}">
+                                        Modifier
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% if can_update_rbac and (user_is_super_admin or r.code != 'SUPER_ADMIN') %}
+                        <tr class="collapse bg-light" id="editRole{{ r.id }}">
+                            <td colspan="6" class="p-3">
+                                <div class="row g-3">
+                                    <div class="col-md-7">
+                                        <form method="post" action="{{ url_for('rbac_admin.update_role_route', role_id=r.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <div class="row g-2 mb-2">
+                                                <div class="col-sm-6">
+                                                    <label class="form-label small fw-semibold">Nom du rôle</label>
+                                                    <input type="text" name="name" class="form-control form-control-sm" value="{{ r.name }}" required>
+                                                </div>
+                                                <div class="col-sm-6 d-flex align-items-end">
+                                                    <div class="form-check mb-1">
+                                                        <input class="form-check-input" type="checkbox" name="is_active" value="1"
+                                                               id="ract_{{ r.id }}" {% if r.is_active %}checked{% endif %}
+                                                               {% if r.code == 'SUPER_ADMIN' %}disabled{% endif %}>
+                                                        <label class="form-check-label small fw-semibold" for="ract_{{ r.id }}">
+                                                            Rôle actif (ses permissions s'appliquent)
+                                                        </label>
+                                                        {% if r.code == 'SUPER_ADMIN' %}
+                                                        <input type="hidden" name="is_active" value="1">
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-semibold">Description</label>
+                                                <input type="text" name="description" class="form-control form-control-sm" value="{{ r.description or '' }}">
+                                            </div>
+                                            <button type="submit" class="btn btn-sm btn-primary">Enregistrer</button>
+                                        </form>
+                                    </div>
+                                    <div class="col-md-5 border-start">
+                                        {% if can_delete_rbac and r.code != 'SUPER_ADMIN' %}
+                                        <form method="post" action="{{ url_for('rbac_admin.delete_role_route', role_id=r.id) }}"
+                                              onsubmit="return confirm('Confirmer la suppression du rôle {{ r.name }} ?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <label class="form-label small fw-semibold text-danger">Supprimer ce rôle</label>
+                                            {% if role_user_counts.get(r.id, 0) > 0 %}
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block mb-1">
+                                                    Ce rôle est attribué à {{ role_user_counts.get(r.id, 0) }} utilisateur(s). Choisissez un rôle de réaffectation :
+                                                </small>
+                                                <select name="reassign_to_role_id" class="form-select form-select-sm" required>
+                                                    <option value="">— Réaffecter les utilisateurs vers… —</option>
+                                                    {% for other in roles if other.id != r.id and other.is_active and (user_is_super_admin or other.code != 'SUPER_ADMIN') %}
+                                                    <option value="{{ other.id }}">{{ other.name }} ({{ other.code }})</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            {% endif %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                                Supprimer le rôle
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <small class="text-muted">Le rôle Super administrateur est protégé contre la suppression.</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif active_tab == 'matrix' %}
+<div class="card mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <form method="get" action="{{ url_for('rbac_admin.index') }}" class="d-flex flex-wrap align-items-center gap-2 m-0">
+            <input type="hidden" name="tab" value="matrix">
+            <label for="matrix-role-select" class="fw-semibold small">Rôle sélectionné :</label>
+            <select id="matrix-role-select" name="role_id" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                {% for r in roles %}
+                <option value="{{ r.id }}" {% if selected_role and selected_role.id == r.id %}selected{% endif %}>
+                    {{ r.name }} ({{ r.code }}){% if not r.is_active %} [INACTIF]{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+
+        {% if selected_role and can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMatrix(true)">Tout cocher</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllMatrix(false)">Tout décocher</button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if selected_role %}
+    <div class="card-body pb-2">
+        <div class="alert alert-light border py-2 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <strong>{{ selected_role.name }}</strong> (<code>{{ selected_role.code }}</code>) —
+                <span class="text-muted small">{{ selected_role.description }}</span>
+            </div>
+            <span class="badge text-bg-secondary">{{ role_users | length }} utilisateur(s) assigné(s)</span>
+        </div>
+
+        {% if selected_role.code == 'SUPER_ADMIN' %}
+        <div class="alert alert-info py-2 small">
+            Le rôle <strong>Super administrateur</strong> dispose par conception d'un accès complet sur l'ensemble des modules et établissements (§8 RBAC). Ses permissions sont toutes actives et verrouillées contre la désactivation accidentelle.
+        </div>
+        {% endif %}
+    </div>
+
+    <form method="post" action="{{ url_for('rbac_admin.save_role_matrix', role_id=selected_role.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width: 210px;">Module fonctionnel</th>
+                        {% for act in action_codes %}
+                        <th class="text-center" style="min-width: 88px;">
+                            <div class="small fw-bold">{{ action_labels.get(act, act) }}</div>
+                            <code style="font-size: 0.68rem;" class="text-muted">{{ act }}</code>
+                        </th>
+                        {% endfor %}
+                        {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
+                        <th class="text-center" style="min-width: 120px;">Sélection ligne</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set lock_matrix = (not can_update_rbac) or (selected_role.code == 'SUPER_ADMIN') %}
+                    {% for row in matrix_rows %}
+                    <tr data-module-row="{{ row.module }}">
+                        <td>
+                            <div class="fw-semibold">{{ row.module_label }}</div>
+                            <code style="font-size: 0.72rem;" class="text-muted">{{ row.module }}</code>
+                        </td>
+                        {% for act in action_codes %}
+                        {% set perms_in_cell = row.by_action.get(act, []) %}
+                        <td class="text-center">
+                            {% if perms_in_cell %}
+                                {% for perm in perms_in_cell %}
+                                <div class="form-check d-inline-block m-0" title="{{ perm.code }} — {{ perm.description }}">
+                                    <input class="form-check-input yn-perm-chk"
+                                           type="checkbox"
+                                           name="permission_ids[]"
+                                           value="{{ perm.id }}"
+                                           id="perm_{{ perm.id }}"
+                                           {% if selected_role.code == 'SUPER_ADMIN' or perm.id in selected_role_perm_ids %}checked{% endif %}
+                                           {% if lock_matrix %}disabled{% endif %}>
+                                    {% if (perms_in_cell | length) > 1 %}
+                                    <label class="form-check-label small d-block" style="font-size: 0.68rem;" for="perm_{{ perm.id }}">
+                                        {{ perm.resource }}
+                                    </label>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted opacity-25">—</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary py-0 px-2"
+                                        onclick="toggleModuleRow('{{ row.module }}', true)" title="Tout cocher pour {{ row.module_label }}">✓</button>
+                                <button type="button" class="btn btn-outline-secondary py-0 px-2"
+                                        onclick="toggleModuleRow('{{ row.module }}', false)" title="Tout décocher pour {{ row.module_label }}">✕</button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
+        <div class="card-footer d-flex justify-content-between align-items-center bg-light">
+            <span class="small text-muted">
+                Toute modification prend effet <strong>immédiatement</strong> sur les sessions actives et est inscrite au journal d'audit.
+            </span>
+            <button type="submit" class="btn btn-primary">
+                Enregistrer la matrice de « {{ selected_role.name }} »
+            </button>
+        </div>
+        {% endif %}
+    </form>
+
+    <!-- Utilisateurs assignés à ce rôle (§5) -->
+    <div class="card-body border-top">
+        <h2 class="h6 fw-bold mb-2">Utilisateurs actuellement associés au rôle « {{ selected_role.name }} » ({{ role_users | length }})</h2>
+        {% if role_users %}
+        <div class="d-flex flex-wrap gap-2">
+            {% for u in role_users %}
+            <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
+               class="badge text-bg-light border text-dark text-decoration-none p-2">
+                <code>{{ u.username }}</code> — {{ u.full_name }}
+                {% if not u.is_active %}<span class="text-danger">(Inactif)</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="small text-muted mb-0">Aucun utilisateur n'est associé à ce rôle pour le moment.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if user_is_super_admin and can_create_rbac %}
+<div class="card">
+    <div class="card-header fw-semibold">Extensibilité (§1.4) — Déclarer une nouvelle permission granulaire</div>
+    <div class="card-body">
+        <form method="post" action="{{ url_for('rbac_admin.create_permission_route') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Code unique *</label>
+                <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. cantine.view">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Clé module *</label>
+                <input type="text" name="module" class="form-control form-control-sm" required placeholder="ex. cantine">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Libellé module *</label>
+                <input type="text" name="module_label" class="form-control form-control-sm" required placeholder="ex. Cantine scolaire">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Ressource *</label>
+                <input type="text" name="resource" class="form-control form-control-sm" required placeholder="ex. Repas">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Action *</label>
+                <select name="action" class="form-select form-select-sm">
+                    {% for act in action_codes %}
+                    <option value="{{ act }}">{{ action_labels.get(act, act) }} ({{ act }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Description *</label>
+                <input type="text" name="description" class="form-control form-control-sm" required placeholder="Consulter la cantine">
+            </div>
+            <div class="col-12 text-end">
+                <button type="submit" class="btn btn-sm btn-outline-primary">Ajouter au catalogue des permissions</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function toggleModuleRow(mod, checked) {
+    const row = document.querySelector('tr[data-module-row="' + mod + '"]');
+    if (!row) return;
+    row.querySelectorAll('input.yn-perm-chk:not(:disabled)').forEach(function(cb) {
+        cb.checked = checked;
+    });
+}
+function toggleAllMatrix(checked) {
+    document.querySelectorAll('input.yn-perm-chk:not(:disabled)').forEach(function(cb) {
+        cb.checked = checked;
+    });
+}
+</script>
+
+{% elif active_tab == 'users' and can_perm('users.view') %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Vue synthétique des utilisateurs, rôles cumulés et surcharges individuelles</span>
+        <a href="{{ url_for('admin.users_manage') }}" class="btn btn-sm btn-primary">Créer / modifier un utilisateur</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Utilisateur</th>
+                    <th>Établissement</th>
+                    <th>Rôles attribués</th>
+                    <th class="text-center">Surcharges individuelles</th>
+                    <th class="text-center">Statut</th>
+                    <th class="text-end">Inspection & Surcharges</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in scoped_users %}
+                <tr>
+                    <td>
+                        <code>{{ u.username }}</code> — <strong>{{ u.full_name }}</strong>
+                    </td>
+                    <td class="small">{{ u.establishment.name if u.establishment else 'Global / Défaut' }}</td>
+                    <td>
+                        {% for r in u.active_roles %}
+                        <span class="badge text-bg-light border text-dark me-1">{{ r.name }}</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">Aucun rôle actif</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-center">
+                        {% if u.permission_overrides | length > 0 %}
+                        <span class="badge text-bg-warning text-dark">{{ u.permission_overrides | length }} dérogation(s)</span>
+                        {% else %}
+                        <span class="text-muted small">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if not u.is_active %}
+                        <span class="badge text-bg-secondary">Désactivé</span>
+                        {% elif u.is_suspended() %}
+                        <span class="badge text-bg-warning text-dark">Suspendu</span>
+                        {% else %}
+                        <span class="badge text-bg-success">Actif</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
+                           class="btn btn-sm btn-outline-primary">
+                            Voir permissions effectives →
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif active_tab == 'establishments' %}
+<div class="row g-4">
+    {% if user_is_super_admin %}
+    <div class="col-xl-4">
+        <div class="card">
+            <div class="card-header fw-semibold">Ajouter un établissement (Multi-établissements §8)</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('rbac_admin.create_establishment') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Code unique *</label>
+                        <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. ETAB-ANNEXE-B">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Nom de l'établissement *</label>
+                        <input type="text" name="name" class="form-control form-control-sm" required placeholder="ex. École Primaire Annexe B">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">CEB / Circonscription</label>
+                        <input type="text" name="ceb" class="form-control form-control-sm" placeholder="ex. CEB de Ouaga II">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Localité</label>
+                        <input type="text" name="locality" class="form-control form-control-sm" placeholder="ex. Ouagadougou">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer l'établissement</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="{{ 'col-xl-8' if user_is_super_admin else 'col-12' }}">
+        <div class="card">
+            <div class="card-header fw-semibold">Périmètres d'établissement enregistrés</div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Nom de l'établissement</th>
+                            <th>CEB / Localité</th>
+                            <th class="text-center">Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for est in establishments %}
+                        <tr>
+                            <td><code>{{ est.code }}</code></td>
+                            <td class="fw-semibold">{{ est.name }}</td>
+                            <td class="small text-muted">{{ est.ceb or '—' }} {% if est.locality %}• {{ est.locality }}{% endif %}</td>
+                            <td class="text-center">
+                                <span class="badge {% if est.is_active %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                    {{ 'Actif' if est.is_active else 'Inactif' }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif active_tab == 'audit' and can_perm('audit.view') %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Journal de sécurité RBAC et tentatives d'accès refusées (lecture seule)</span>
+        <a href="{{ url_for('admin.audit_logs_view') }}" class="btn btn-sm btn-outline-secondary">Journal complet →</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Horodatage</th>
+                    <th>Acteur</th>
+                    <th>Rôle</th>
+                    <th>Module</th>
+                    <th>Action</th>
+                    <th>Résultat</th>
+                    <th>Détail</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lg in rbac_logs %}
+                <tr class="{% if lg.status == 'DENIED' %}table-warning{% endif %}">
+                    <td class="small text-nowrap">{{ lg.created_at | datetime_fr }}</td>
+                    <td><code>{{ lg.username_snapshot }}</code></td>
+                    <td class="small">{{ lg.role_snapshot or '—' }}</td>
+                    <td class="small"><code>{{ lg.module }}</code></td>
+                    <td><span class="badge text-bg-light border text-dark">{{ lg.action }}</span></td>
+                    <td>
+                        {% if lg.status == 'DENIED' %}
+                        <span class="badge text-bg-danger">REFUSÉ</span>
+                        {% else %}
+                        <span class="badge text-bg-success">{{ lg.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small">{{ lg.summary }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-4 text-muted">Aucun événement RBAC enregistré.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

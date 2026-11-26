@@ -25,7 +25,7 @@
     <header class="yn-topbar py-2 px-3">
         <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div class="d-flex align-items-center gap-3">
-                <a href="{{ url_for('dashboard.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2">
+                <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2">
                     <span class="yn-brand-badge">YN</span>
                     <div>
                         <div class="fw-bold lh-1">YELEN NOTES</div>
@@ -34,7 +34,12 @@
                         </small>
                     </div>
                 </a>
-                {% if current_establishment and current_establishment.school_name %}
+                {% if nav_current_est %}
+                <span class="vr bg-light opacity-25 d-none d-md-inline"></span>
+                <span class="fw-semibold d-none d-md-inline text-light">
+                    {{ nav_current_est.name }}
+                </span>
+                {% elif current_establishment and current_establishment.school_name %}
                 <span class="vr bg-light opacity-25 d-none d-md-inline"></span>
                 <span class="fw-semibold d-none d-md-inline text-light">
                     {{ current_establishment.school_name }}
@@ -43,7 +48,21 @@
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-2">
-                {% if nav_years %}
+                {% if nav_establishments and (nav_establishments | length) > 1 %}
+                <form method="post" action="{{ url_for('rbac_admin.switch_establishment') }}" class="d-flex align-items-center gap-1 m-0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="nav-est-select" class="small text-white-50 me-1 d-none d-xl-inline">Établissement :</label>
+                    <select id="nav-est-select" name="establishment_id" class="form-select form-select-sm bg-light" onchange="this.form.submit()">
+                        {% for est in nav_establishments %}
+                        <option value="{{ est.id }}" {% if nav_current_est and nav_current_est.id == est.id %}selected{% endif %}>
+                            {{ est.code }} — {{ est.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+                {% endif %}
+
+                {% if nav_years and not is_parent_only %}
                 <form method="post" action="{{ url_for('dashboard.switch_view_year') }}" class="d-flex align-items-center gap-1 m-0">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <label for="nav-year-select" class="small text-white-50 me-1 d-none d-sm-inline">Année :</label>
@@ -82,25 +101,40 @@
         <nav class="yn-sidebar py-2 no-print" aria-label="Menu principal">
             <div class="yn-nav-section">Pilotage</div>
             <ul class="nav flex-column">
+                {% if can_perm('dashboard.view') and not is_parent_only %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" href="{{ url_for('dashboard.index') }}">
                         Tableau de bord
                     </a>
                 </li>
+                {% endif %}
+                {% if is_parent_only or (current_user.parent_links | length > 0) %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'operations.parent_portal' %}active{% endif %}" href="{{ url_for('operations.parent_portal') }}">
+                        Espace Parent / Tuteur
+                    </a>
+                </li>
+                {% endif %}
             </ul>
 
+            {% if not is_parent_only and has_any_perm('students.view', 'enrollments.view', 'subjects.view', 'grades.view') %}
             <div class="yn-nav-section">Pédagogie & Saisie</div>
             <ul class="nav flex-column">
+                {% if has_any_perm('students.view', 'enrollments.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if (request.endpoint or '').startswith('students.') %}active{% endif %}" href="{{ url_for('students.students_list') }}">
                         Élèves & Inscriptions
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('subjects.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint in ('academics.class_subjects', 'academics.subjects_entry_shortcut') %}active{% endif %}" href="{{ url_for('academics.subjects_entry_shortcut') }}">
                         Matières & Barèmes
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('grades.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint in ('grades.grade_entry', 'grades.grade_history_view') %}active{% endif %}" href="{{ url_for('grades.grade_entry') }}">
                         Saisie des notes
@@ -111,10 +145,34 @@
                         Observations bulletins
                     </a>
                 </li>
+                {% endif %}
             </ul>
+            {% endif %}
 
+            {% if not is_parent_only and has_any_perm('absences.view', 'accounting.view') %}
+            <div class="yn-nav-section">Vie scolaire & Gestion</div>
+            <ul class="nav flex-column">
+                {% if can_perm('absences.view') %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'operations.absences_manage' %}active{% endif %}" href="{{ url_for('operations.absences_manage') }}">
+                        Absences & Discipline
+                    </a>
+                </li>
+                {% endif %}
+                {% if can_perm('accounting.view') %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'operations.accounting_manage' %}active{% endif %}" href="{{ url_for('operations.accounting_manage') }}">
+                        Comptabilité scolaire
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+            {% endif %}
+
+            {% if not is_parent_only and has_any_perm('bulletins.view', 'proposition.view') %}
             <div class="yn-nav-section">États & Impression PDF</div>
             <ul class="nav flex-column">
+                {% if can_perm('bulletins.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'reports.period_releve' %}active{% endif %}" href="{{ url_for('reports.period_releve') }}">
                         Relevés de notes
@@ -130,56 +188,83 @@
                         Tableau synoptique
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('proposition.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'reports.end_of_year_proposition' %}active{% endif %}" href="{{ url_for('reports.end_of_year_proposition') }}">
                         Proposition de fin d'année
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('bulletins.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'reports.bulletins_center' %}active{% endif %}" href="{{ url_for('reports.bulletins_center') }}">
                         Bulletins scolaires PDF
                     </a>
                 </li>
+                {% endif %}
             </ul>
+            {% endif %}
 
+            {% if not is_parent_only and has_any_perm('settings.view', 'evaluations.view', 'classes.view', 'subjects.view') %}
             <div class="yn-nav-section">Paramétrage scolaire</div>
             <ul class="nav flex-column">
+                {% if can_perm('settings.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'settings.establishment' %}active{% endif %}" href="{{ url_for('settings.establishment') }}">
                         Établissement & Logo
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('evaluations.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint in ('settings.school_years', 'settings.periods') %}active{% endif %}" href="{{ url_for('settings.school_years') }}">
                         Années & Périodes
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('classes.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'academics.classes_list' %}active{% endif %}" href="{{ url_for('academics.classes_list') }}">
                         Classes & Matières
                     </a>
                 </li>
+                {% endif %}
+                {% if can_perm('subjects.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'academics.policies_and_scales' %}active{% endif %}" href="{{ url_for('academics.policies_and_scales') }}">
                         Barèmes & Appréciations
                     </a>
                 </li>
+                {% endif %}
             </ul>
+            {% endif %}
 
-            {% if current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR) %}
-            <div class="yn-nav-section">Sécurité & Maintenance</div>
+            {% if has_any_perm('rbac.view', 'users.view', 'settings.update', 'settings.manage', 'audit.view') %}
+            <div class="yn-nav-section">Administration & Sécurité</div>
             <ul class="nav flex-column">
+                {% if can_perm('rbac.view') %}
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'admin.backups_manage' %}active{% endif %}" href="{{ url_for('admin.backups_manage') }}">
-                        Sauvegardes & Restauration
+                    <a class="nav-link {% if (request.endpoint or '').startswith('rbac_admin.') %}active{% endif %}" href="{{ url_for('rbac_admin.index') }}">
+                        Gestion des rôles & permissions
                     </a>
                 </li>
-                {% if current_user.role == ROLE_ADMIN %}
+                {% endif %}
+                {% if can_perm('users.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'admin.users_manage' %}active{% endif %}" href="{{ url_for('admin.users_manage') }}">
                         Comptes utilisateurs
                     </a>
                 </li>
+                {% endif %}
+                {% if has_any_perm('settings.update', 'settings.manage') %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.backups_manage' %}active{% endif %}" href="{{ url_for('admin.backups_manage') }}">
+                        Sauvegardes & Restauration
+                    </a>
+                </li>
+                {% endif %}
+                {% if can_perm('audit.view') %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'admin.audit_logs_view' %}active{% endif %}" href="{{ url_for('admin.audit_logs_view') }}">
                         Journaux & Diagnostic

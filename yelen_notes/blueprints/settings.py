@@ -25,18 +25,25 @@ from yelen_notes.blueprints.dashboard import get_selected_school_year
 from yelen_notes.extensions import db
 from yelen_notes.models import (
     LIFECYCLE_STATUSES,
-    ROLE_ADMIN,
-    ROLE_DIRECTEUR,
     STATUS_BROUILLON,
     STATUS_CLOTUREE,
     STATUS_OUVERTE,
+    Establishment,
     EstablishmentSettings,
     EvaluationPeriod,
     SchoolYear,
     utcnow_naive,
 )
 from yelen_notes.paths import RuntimePaths
-from yelen_notes.security import record_audit_log, roles_required
+from yelen_notes.security import (
+    any_permission_required,
+    get_accessible_years_query,
+    get_current_establishment_id,
+    has_permission,
+    permission_required,
+    record_audit_log,
+    user_can_access_establishment,
+)
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -62,14 +69,23 @@ def school_logo():
 
 
 @settings_bp.route("/etablissement", methods=["GET", "POST"])
-@login_required
+@permission_required("settings.view", module="settings")
 def establishment():
     settings = EstablishmentSettings.get_singleton()
-    years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
-    can_edit = current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+    years = get_accessible_years_query(current_user).all()
+    can_edit = has_permission(current_user, "settings.update")
+    cur_est_id = get_current_establishment_id(current_user)
+    cur_est = db.session.get(Establishment, cur_est_id)
 
     if request.method == "POST":
         if not can_edit:
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Modification des paramètres d'établissement refusée pour '{current_user.username}'",
+                module="settings",
+                status="DENIED",
+                commit=True,
+            )
             abort(403)
 
         settings.country = (request.form.get("country") or "Burkina Faso").strip()[:100]
@@ -82,12 +98,25 @@ def establishment():
         settings.phone = (request.form.get("phone") or "").strip()[:60] or None
         settings.email = (request.form.get("email") or "").strip()[:120] or None
 
-        active_yr_id = request.form.get("active_school_year_id", type=int)
-        if active_yr_id and db.session.get(SchoolYear, active_yr_id):
-            settings.active_school_year_id = active_yr_id
-            session["selected_school_year_id"] = active_yr_id
+        if cur_est is not None and cur_est.id == 1:
+            if settings.school_name:
+                cur_est.name = settings.school_name
+            if settings.school_code:
+                cur_est.code = settings.school_code
+            cur_est.ceb = settings.ceb
+            cur_est.locality = settings.locality
+            cur_est.address = settings.address
+            cur_est.phone = settings.phone
+            cur_est.email = settings.email
 
-        if current_user.role == ROLE_ADMIN:
+        active_yr_id = request.form.get("active_school_year_id", type=int)
+        if active_yr_id:
+            yr_obj = db.session.get(SchoolYear, active_yr_id)
+            if yr_obj and user_can_access_establishment(current_user, yr_obj.establishment_id):
+                settings.active_school_year_id = active_yr_id
+                session["selected_school_year_id"] = active_yr_id
+
+        if has_permission(current_user, "settings.manage"):
             timeout_min = request.form.get("session_timeout_minutes", type=int)
             if timeout_min and timeout_min >= 5:
                 settings.session_timeout_minutes = min(timeout_min, 480)
@@ -138,14 +167,23 @@ def establishment():
 
 
 @settings_bp.route("/annees-scolaires", methods=["GET", "POST"])
-@login_required
+@permission_required("evaluations.view", module="evaluations")
 def school_years():
-    years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    years = get_accessible_years_query(current_user).all()
     settings = EstablishmentSettings.get_singleton()
-    can_edit = current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+    can_edit = has_permission(current_user, "evaluations.create") or has_permission(
+        current_user, "evaluations.update"
+    )
 
     if request.method == "POST":
-        if not can_edit:
+        if not has_permission(current_user, "evaluations.create"):
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Création d'année scolaire refusée pour '{current_user.username}'",
+                module="evaluations",
+                status="DENIED",
+                commit=True,
+            )
             abort(403)
 
         label = (request.form.get("label") or "").strip()
@@ -176,6 +214,7 @@ def school_years():
             return redirect(url_for("settings.school_years"))
 
         yr = SchoolYear(
+            establishment_id=get_current_establishment_id(current_user),
             label=label,
             start_date=start_d,
             end_date=end_d,
@@ -210,9 +249,11 @@ def school_years():
 
 
 @settings_bp.route("/annees-scolaires/<int:year_id>/modifier", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@any_permission_required("evaluations.update", "evaluations.validate", "evaluations.manage", module="evaluations")
 def update_school_year(year_id: int):
     yr = db.get_or_404(SchoolYear, year_id)
+    if not user_can_access_establishment(current_user, yr.establishment_id):
+        abort(403)
     action = request.form.get("action", "update")
 
     if action == "activate":
@@ -230,6 +271,8 @@ def update_school_year(year_id: int):
         return redirect(url_for("settings.school_years"))
 
     if action == "close":
+        if not has_permission(current_user, "evaluations.validate"):
+            abort(403)
         yr.status = STATUS_CLOTUREE
         yr.closed_at = utcnow_naive()
         yr.closed_by_id = current_user.id
@@ -252,7 +295,7 @@ def update_school_year(year_id: int):
         return redirect(url_for("settings.school_years"))
 
     if action == "reopen":
-        if current_user.role != ROLE_ADMIN:
+        if not has_permission(current_user, "evaluations.manage"):
             abort(403)
         yr.status = STATUS_OUVERTE
         yr.closed_at = None
@@ -296,15 +339,19 @@ def update_school_year(year_id: int):
 
 
 @settings_bp.route("/periodes", methods=["GET", "POST"])
-@login_required
+@permission_required("evaluations.view", module="evaluations")
 def periods():
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
     year_id = request.args.get("year_id", type=int) or request.form.get("year_id", type=int)
     selected_year = db.session.get(SchoolYear, year_id) if year_id else get_selected_school_year()
-    can_edit = current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+    if selected_year and not user_can_access_establishment(current_user, selected_year.establishment_id):
+        abort(403)
+    can_edit = has_permission(current_user, "evaluations.create") or has_permission(
+        current_user, "evaluations.update"
+    )
 
     if request.method == "POST":
-        if not can_edit or selected_year is None:
+        if not has_permission(current_user, "evaluations.create") or selected_year is None:
             abort(403)
         if selected_year.is_closed:
             flash("Cette année scolaire est clôturée : impossible d'y ajouter une période.", "danger")
@@ -388,9 +435,11 @@ def periods():
 
 
 @settings_bp.route("/periodes/<int:period_id>/statut", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("evaluations.validate", module="evaluations")
 def change_period_status(period_id: int):
     period = db.get_or_404(EvaluationPeriod, period_id)
+    if not user_can_access_establishment(current_user, period.school_year.establishment_id):
+        abort(403)
     if period.school_year.is_closed:
         flash("L'année scolaire est clôturée : le statut des périodes est figé.", "danger")
         return redirect(url_for("settings.periods", year_id=period.school_year_id))
@@ -420,9 +469,11 @@ def change_period_status(period_id: int):
 
 
 @settings_bp.route("/periodes/<int:period_id>/modifier", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("evaluations.update", module="evaluations")
 def update_period(period_id: int):
     period = db.get_or_404(EvaluationPeriod, period_id)
+    if not user_can_access_establishment(current_user, period.school_year.establishment_id):
+        abort(403)
     if period.school_year.is_closed:
         flash("Impossible de modifier une période d'une année clôturée.", "danger")
         return redirect(url_for("settings.periods", year_id=period.school_year_id))

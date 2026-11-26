@@ -1,56 +1,77 @@
 {% extends "base.html" %}
-{% block title %}Comptes utilisateurs & Droits{% endblock %}
+{% block title %}Comptes utilisateurs{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div>
-        <h1 class="h4 fw-bold mb-0">Comptes utilisateurs et droits d'accès (RBAC)</h1>
-        <small class="text-muted">Contrôle strict côté serveur — Mots de passe hachés (scrypt) (§2, §17 CdC)</small>
+        <h1 class="h4 fw-bold mb-0">Gestion des comptes utilisateurs</h1>
+        <small class="text-muted">Attribution multi-rôles, activation/désactivation, suspension temporaire et périmètre d'accès (§6 RBAC)</small>
     </div>
+    {% if can_perm('rbac.view') %}
+    <a href="{{ url_for('rbac_admin.index') }}" class="btn btn-sm btn-outline-primary">
+        Gérer les rôles & la matrice des permissions →
+    </a>
+    {% endif %}
 </div>
 
 <div class="row g-4">
-    <div class="col-lg-4">
+    {% if can_create_user %}
+    <div class="col-xl-4">
         <div class="card">
-            <div class="card-header">Créer un compte utilisateur</div>
+            <div class="card-header fw-semibold">Nouveau compte utilisateur</div>
             <div class="card-body">
-                <form method="post" action="{{ url_for('admin.users_manage') }}" autocomplete="off">
+                <form method="post" action="{{ url_for('admin.users_manage') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Identifiant de connexion *</label>
-                        <input type="text" name="username" class="form-control" required minlength="3" placeholder="ex. titulaire_cp1">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Identifiant de connexion *</label>
+                        <input type="text" name="username" class="form-control form-control-sm" required placeholder="ex. secretaire_ecole">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Nom et prénoms *</label>
-                        <input type="text" name="full_name" class="form-control" required placeholder="ex. Mme KABORÉ Awa">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Nom et prénom *</label>
+                        <input type="text" name="full_name" class="form-control form-control-sm" required placeholder="ex. Mme SANOU Fatimata">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Profil de droits *</label>
-                        <select name="role" class="form-select" required>
-                            {% for code, lbl in role_labels.items() %}
-                            <option value="{{ code }}">{{ lbl }}</option>
+                    {% if establishments and (establishments | length) > 1 %}
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Établissement principal *</label>
+                        <select name="establishment_id" class="form-select form-select-sm">
+                            {% for est in establishments %}
+                            <option value="{{ est.id }}">{{ est.code }} — {{ est.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Mot de passe initial (min. 8 caractères) *</label>
-                        <input type="password" name="password" class="form-control" required minlength="8">
+                    {% endif %}
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Rôle(s) RBAC attribué(s) * <span class="text-muted fw-normal">(un ou plusieurs)</span></label>
+                        <div class="border rounded p-2 bg-light" style="max-height: 170px; overflow-y: auto;">
+                            {% for r in available_roles %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="role_ids[]" value="{{ r.id }}" id="new_role_{{ r.id }}"
+                                       {% if r.code == 'ENSEIGNANT' %}checked{% endif %}>
+                                <label class="form-check-label small" for="new_role_{{ r.id }}">
+                                    <strong>{{ r.name }}</strong> <code class="text-muted">({{ r.code }})</code>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
                     </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="mcp" checked>
-                        <label class="form-check-label small" for="mcp">Exiger le changement de mot de passe à la 1re connexion</label>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Mot de passe initial * (8 caractères min.)</label>
+                        <input type="password" name="password" class="form-control form-control-sm" minlength="8" required>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="must_chg" checked>
+                        <label class="form-check-label small" for="must_chg">Exiger le changement à la première connexion</label>
                     </div>
 
                     {% if all_classes %}
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Classes affectées (pour le profil Enseignant)</label>
-                        <div class="border rounded p-2 bg-light" style="max-height: 150px; overflow-y: auto;">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Classes affectées (pour un Enseignant)</label>
+                        <div class="border rounded p-2" style="max-height: 130px; overflow-y: auto;">
                             {% for cls in all_classes %}
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="class_ids[]" value="{{ cls.id }}" id="new_c_{{ cls.id }}">
-                                <label class="form-check-label small" for="new_c_{{ cls.id }}">
-                                    {{ cls.school_year.label }} — {{ cls.name }}
+                                <input class="form-check-input" type="checkbox" name="class_ids[]" value="{{ cls.id }}" id="new_cls_{{ cls.id }}">
+                                <label class="form-check-label small" for="new_cls_{{ cls.id }}">
+                                    {{ cls.school_year.label }} — <strong>{{ cls.name }}</strong> ({{ cls.titulaire_name }})
                                 </label>
                             </div>
                             {% endfor %}
@@ -58,45 +79,86 @@
                     </div>
                     {% endif %}
 
-                    <button type="submit" class="btn btn-primary w-100">Créer le compte</button>
+                    {% if all_students %}
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Élève(s) rattaché(s) (pour un Parent / Tuteur)</label>
+                        <div class="border rounded p-2" style="max-height: 130px; overflow-y: auto;">
+                            {% for st in all_students %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="student_ids[]" value="{{ st.id }}" id="new_st_{{ st.id }}">
+                                <label class="form-check-label small" for="new_st_{{ st.id }}">
+                                    {{ st.full_name }} <span class="text-muted">({{ st.unique_code }})</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer le compte</button>
                 </form>
             </div>
         </div>
     </div>
+    {% endif %}
 
-    <div class="col-lg-8">
+    <div class="{{ 'col-xl-8' if can_create_user else 'col-12' }}">
         <div class="card">
-            <div class="card-header">Utilisateurs enregistrés ({{ users | length }})</div>
+            <div class="card-header fw-semibold">Comptes enregistrés ({{ users | length }})</div>
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Identifiant / Nom</th>
-                            <th>Profil</th>
-                            <th>Dernière connexion</th>
-                            <th>Statut</th>
-                            <th class="text-end">Gérer</th>
+                            <th>Identifiant & Nom</th>
+                            <th>Rôle(s) actif(s)</th>
+                            <th>Périmètre</th>
+                            <th class="text-center">Statut</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for u in users %}
                         <tr>
                             <td>
-                                <div class="fw-bold">{{ u.username }}</div>
-                                <small class="text-muted">{{ u.full_name }}</small>
+                                <div><code>{{ u.username }}</code></div>
+                                <div class="fw-semibold small">{{ u.full_name }}</div>
+                                {% if u.permission_overrides | length > 0 %}
+                                <span class="badge text-bg-warning text-dark mt-1" title="Ce compte possède des permissions dérogatoires individuelles">
+                                    {{ u.permission_overrides | length }} surcharge(s) individuelle(s)
+                                </span>
+                                {% endif %}
                             </td>
                             <td>
-                                <span class="badge text-bg-light border text-dark">{{ u.role_label }}</span>
-                                {% if u.role == 'ENSEIGNANT' %}
-                                <div class="small text-muted mt-1">
-                                    {{ u.class_assignments | length }} classe(s) affectée(s)
+                                {% for r in u.active_roles %}
+                                <span class="badge text-bg-light border text-dark me-1 mb-1">{{ r.name }}</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary">{{ u.role_label }}</span>
+                                {% endfor %}
+                            </td>
+                            <td class="small">
+                                {% if u.establishment %}
+                                <div class="text-muted">{{ u.establishment.code }}</div>
+                                {% endif %}
+                                {% if u.class_assignments %}
+                                <div>
+                                    Classes :
+                                    {% for ca in u.class_assignments %}
+                                        <span class="badge text-bg-primary bg-opacity-75">{{ ca.academic_class.name }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                {% if u.parent_links %}
+                                <div>
+                                    Enfants : <strong>{{ u.parent_links | length }}</strong>
                                 </div>
                                 {% endif %}
                             </td>
-                            <td class="small">{{ u.last_login_at | datetime_fr }}</td>
-                            <td>
+                            <td class="text-center">
                                 {% if not u.is_active %}
                                     <span class="badge text-bg-secondary">Désactivé</span>
+                                {% elif u.is_suspended() %}
+                                    <span class="badge text-bg-warning text-dark">Suspendu</span>
+                                    <div class="small text-muted" style="font-size:0.7rem;">jusqu'au {{ u.suspended_until | date_fr }}</div>
                                 {% elif u.is_locked() %}
                                     <span class="badge text-bg-danger">Verrouillé</span>
                                 {% else %}
@@ -104,68 +166,163 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#editUser{{ u.id }}">
-                                    Configurer
-                                </button>
+                                <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                                    {% if can_perm('rbac.view') %}
+                                    <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
+                                       class="btn btn-sm btn-outline-dark" title="Voir les permissions effectives et surcharges">
+                                        Droits
+                                    </a>
+                                    {% endif %}
+                                    {% if can_update_user %}
+                                    <button class="btn btn-sm btn-outline-primary" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#editUser{{ u.id }}">
+                                        Gérer
+                                    </button>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
+                        {% if can_update_user %}
                         <tr class="collapse bg-light" id="editUser{{ u.id }}">
                             <td colspan="5" class="p-3">
                                 <div class="row g-3">
-                                    <div class="col-md-7">
+                                    <div class="col-md-8">
                                         <form method="post" action="{{ url_for('admin.update_user', user_id=u.id) }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="student_ids_present" value="1">
                                             <div class="row g-2 mb-2">
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small">Nom complet</label>
-                                                    <input type="text" name="full_name" class="form-control form-control-sm" value="{{ u.full_name }}">
+                                                    <label class="form-label small fw-semibold">Nom complet</label>
+                                                    <input type="text" name="full_name" class="form-control form-control-sm" value="{{ u.full_name }}" required>
                                                 </div>
+                                                {% if user_is_super_admin and establishments %}
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small">Profil</label>
-                                                    <select name="role" class="form-select form-select-sm">
-                                                        {% for code, lbl in role_labels.items() %}
-                                                        <option value="{{ code }}" {% if u.role == code %}selected{% endif %}>{{ lbl }}</option>
+                                                    <label class="form-label small fw-semibold">Établissement principal</label>
+                                                    <select name="establishment_id" class="form-select form-select-sm" {% if u.id == current_user.id %}disabled{% endif %}>
+                                                        {% for est in establishments %}
+                                                        <option value="{{ est.id }}" {% if u.establishment_id == est.id %}selected{% endif %}>
+                                                            {{ est.code }} — {{ est.name }}
+                                                        </option>
                                                         {% endfor %}
                                                     </select>
                                                 </div>
+                                                {% endif %}
                                             </div>
-                                            {% set assigned_ids = u.class_assignments | map(attribute='class_id') | list %}
+
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-semibold">Rôle(s) RBAC attribué(s)</label>
+                                                {% set assigned_rids = u.user_roles | map(attribute='role_id') | list %}
+                                                <div class="border bg-white rounded p-2 d-flex flex-wrap gap-3">
+                                                    {% for r in available_roles %}
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" name="role_ids[]" value="{{ r.id }}"
+                                                               id="u{{ u.id }}_r{{ r.id }}"
+                                                               {% if r.id in assigned_rids or (not assigned_rids and u.role == r.code) %}checked{% endif %}
+                                                               {% if u.id == current_user.id %}disabled{% endif %}>
+                                                        <label class="form-check-label small" for="u{{ u.id }}_r{{ r.id }}">
+                                                            {{ r.name }}
+                                                        </label>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                                {% if u.id == current_user.id %}
+                                                <small class="text-muted">Par sécurité anti-auto-élévation, vous ne pouvez pas modifier vos propres rôles.</small>
+                                                {% endif %}
+                                            </div>
+
+                                            <div class="row g-2 mb-2">
+                                                <div class="col-sm-6">
+                                                    <label class="form-label small fw-semibold">Suspension temporaire jusqu'au</label>
+                                                    <input type="date" name="suspended_until" class="form-control form-control-sm"
+                                                           value="{{ u.suspended_until.strftime('%Y-%m-%d') if u.suspended_until else '' }}"
+                                                           {% if u.id == current_user.id %}disabled{% endif %}>
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <label class="form-label small fw-semibold">Motif de suspension</label>
+                                                    <input type="text" name="suspension_reason" class="form-control form-control-sm"
+                                                           value="{{ u.suspension_reason or '' }}" placeholder="ex. Congé / vérification"
+                                                           {% if u.id == current_user.id %}disabled{% endif %}>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex flex-wrap gap-3 mb-2">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="is_active" value="1"
+                                                           id="act_{{ u.id }}" {% if u.is_active %}checked{% endif %}
+                                                           {% if u.id == current_user.id %}disabled{% endif %}>
+                                                    <label class="form-check-label small" for="act_{{ u.id }}">Compte actif</label>
+                                                    {% if u.id == current_user.id %}
+                                                    <input type="hidden" name="is_active" value="1">
+                                                    {% endif %}
+                                                </div>
+                                                {% if u.is_suspended() %}
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="clear_suspension" value="1" id="clrsusp_{{ u.id }}">
+                                                    <label class="form-check-label small text-success fw-semibold" for="clrsusp_{{ u.id }}">Lever la suspension maintenant</label>
+                                                </div>
+                                                {% endif %}
+                                                {% if u.is_locked() or u.failed_login_count > 0 %}
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="unlock" value="1" id="ulk_{{ u.id }}" checked>
+                                                    <label class="form-check-label small text-danger" for="ulk_{{ u.id }}">Déverrouiller les tentatives échouées</label>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+
                                             {% if all_classes %}
                                             <div class="mb-2">
-                                                <span class="small fw-semibold d-block">Classes autorisées (si Enseignant) :</span>
-                                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                                <label class="form-label small fw-semibold">Classes affectées (Enseignant)</label>
+                                                <div class="border bg-white rounded p-2" style="max-height: 110px; overflow-y: auto;">
+                                                    {% set assigned_cids = u.class_assignments | map(attribute='class_id') | list %}
                                                     {% for cls in all_classes %}
-                                                    <label class="small border rounded px-2 py-1 bg-white">
-                                                        <input type="checkbox" name="class_ids[]" value="{{ cls.id }}"
-                                                               {% if cls.id in assigned_ids %}checked{% endif %}>
-                                                        {{ cls.name }} ({{ cls.school_year.label }})
-                                                    </label>
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" name="class_ids[]" value="{{ cls.id }}"
+                                                               id="u{{ u.id }}_cls{{ cls.id }}" {% if cls.id in assigned_cids %}checked{% endif %}>
+                                                        <label class="form-check-label small" for="u{{ u.id }}_cls{{ cls.id }}">
+                                                            {{ cls.school_year.label }} : {{ cls.name }}
+                                                        </label>
+                                                    </div>
                                                     {% endfor %}
                                                 </div>
                                             </div>
                                             {% endif %}
-                                            <div class="d-flex align-items-center gap-3 mb-2 small">
-                                                <label><input type="checkbox" name="is_active" value="1" {% if u.is_active %}checked{% endif %}> Compte actif</label>
-                                                {% if u.is_locked() %}
-                                                <label class="text-danger"><input type="checkbox" name="unlock" value="1" checked> Déverrouiller maintenant</label>
-                                                {% endif %}
+
+                                            {% if all_students %}
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-semibold">Élève(s) rattaché(s) (Parent / Tuteur)</label>
+                                                <div class="border bg-white rounded p-2" style="max-height: 110px; overflow-y: auto;">
+                                                    {% set linked_sids = u.parent_links | map(attribute='student_id') | list %}
+                                                    {% for st in all_students %}
+                                                    <div class="form-check form-check-inline">
+                                                        <input class="form-check-input" type="checkbox" name="student_ids[]" value="{{ st.id }}"
+                                                               id="u{{ u.id }}_st{{ st.id }}" {% if st.id in linked_sids %}checked{% endif %}>
+                                                        <label class="form-check-label small" for="u{{ u.id }}_st{{ st.id }}">
+                                                            {{ st.full_name }} ({{ st.unique_code }})
+                                                        </label>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
                                             </div>
-                                            <button type="submit" class="btn btn-sm btn-primary">Enregistrer le profil</button>
+                                            {% endif %}
+
+                                            <button type="submit" class="btn btn-sm btn-primary">Enregistrer les modifications</button>
                                         </form>
                                     </div>
-                                    <div class="col-md-5 border-start">
+                                    <div class="col-md-4 border-start">
                                         <form method="post" action="{{ url_for('admin.reset_user_password', user_id=u.id) }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <label class="form-label small fw-semibold">Réinitialiser le mot de passe</label>
-                                            <div class="input-group input-group-sm mb-2">
-                                                <input type="password" name="new_password" class="form-control" minlength="8" placeholder="Nouveau mot de passe…" required>
-                                                <button type="submit" class="btn btn-outline-danger">Réinitialiser</button>
-                                            </div>
+                                            <input type="password" name="new_password" class="form-control form-control-sm mb-2"
+                                                   minlength="8" placeholder="Nouveau mot de passe temporaire" required>
+                                            <button type="submit" class="btn btn-sm btn-outline-warning w-100">
+                                                Réinitialiser le mot de passe
+                                            </button>
                                         </form>
                                     </div>
                                 </div>
                             </td>
                         </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>

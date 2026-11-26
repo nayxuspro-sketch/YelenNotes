@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from yelen_notes.extensions import db
@@ -28,18 +29,74 @@ def utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-# Constantes métier
-ROLE_ADMIN = "ADMIN"
+# Constantes métier et codes de rôles RBAC (§3 Module RBAC)
+ROLE_SUPER_ADMIN = "SUPER_ADMIN"
+ROLE_ADMIN_ETAB = "ADMIN_ETABLISSEMENT"
+ROLE_ADMIN = "ADMIN"  # Alias historique rattaché à SUPER_ADMIN pour compatibilité ascendante
 ROLE_DIRECTEUR = "DIRECTEUR"
+ROLE_SECRETAIRE = "SECRETAIRE"
 ROLE_ENSEIGNANT = "ENSEIGNANT"
+ROLE_COMPTABLE = "COMPTABLE"
+ROLE_SURVEILLANT = "SURVEILLANT"
+ROLE_PARENT = "PARENT"
 ROLE_CONSULTATION = "CONSULTATION"
-ALL_ROLES = (ROLE_ADMIN, ROLE_DIRECTEUR, ROLE_ENSEIGNANT, ROLE_CONSULTATION)
+
+ALL_ROLES = (
+    ROLE_SUPER_ADMIN,
+    ROLE_ADMIN_ETAB,
+    ROLE_ADMIN,
+    ROLE_DIRECTEUR,
+    ROLE_SECRETAIRE,
+    ROLE_ENSEIGNANT,
+    ROLE_COMPTABLE,
+    ROLE_SURVEILLANT,
+    ROLE_PARENT,
+    ROLE_CONSULTATION,
+)
 
 ROLE_LABELS = {
-    ROLE_ADMIN: "Administrateur",
+    ROLE_SUPER_ADMIN: "Super administrateur",
+    ROLE_ADMIN_ETAB: "Administrateur d'établissement",
+    ROLE_ADMIN: "Super administrateur",
     ROLE_DIRECTEUR: "Directeur / Directrice",
-    ROLE_ENSEIGNANT: "Enseignant titulaire",
+    ROLE_SECRETAIRE: "Secrétaire",
+    ROLE_ENSEIGNANT: "Enseignant",
+    ROLE_COMPTABLE: "Comptable",
+    ROLE_SURVEILLANT: "Surveillant",
+    ROLE_PARENT: "Parent / Tuteur",
     ROLE_CONSULTATION: "Consultation uniquement",
+}
+
+# Actions standard du système de permissions granulaires (§4 Module RBAC)
+PERM_VIEW = "VIEW"
+PERM_CREATE = "CREATE"
+PERM_UPDATE = "UPDATE"
+PERM_DELETE = "DELETE"
+PERM_VALIDATE = "VALIDATE"
+PERM_EXPORT = "EXPORT"
+PERM_PRINT = "PRINT"
+PERM_MANAGE = "MANAGE"
+
+ALL_PERMISSION_ACTIONS = (
+    PERM_VIEW,
+    PERM_CREATE,
+    PERM_UPDATE,
+    PERM_DELETE,
+    PERM_VALIDATE,
+    PERM_EXPORT,
+    PERM_PRINT,
+    PERM_MANAGE,
+)
+
+PERMISSION_ACTION_LABELS = {
+    PERM_VIEW: "Consulter",
+    PERM_CREATE: "Créer",
+    PERM_UPDATE: "Modifier",
+    PERM_DELETE: "Supprimer",
+    PERM_VALIDATE: "Valider",
+    PERM_EXPORT: "Exporter",
+    PERM_PRINT: "Imprimer",
+    PERM_MANAGE: "Administrer",
 }
 
 STATUS_BROUILLON = "BROUILLON"
@@ -72,8 +129,224 @@ ANNUAL_WEIGHTED = "WEIGHTED"
 ANNUAL_MODES = (ANNUAL_SIMPLE, ANNUAL_WEIGHTED)
 
 
+class Establishment(db.Model):
+    """Établissement scolaire autonome pour la gestion multi-établissements et l'isolation (§8 RBAC)."""
+
+    __tablename__ = "establishments"
+
+    id = db.Column(Integer, primary_key=True)
+    code = db.Column(String(50), unique=True, nullable=False, index=True)
+    name = db.Column(String(200), nullable=False)
+    ceb = db.Column(String(150), nullable=True)
+    locality = db.Column(String(120), nullable=True)
+    address = db.Column(String(255), nullable=True)
+    phone = db.Column(String(60), nullable=True)
+    email = db.Column(String(120), nullable=True)
+    is_active = db.Column(Boolean, nullable=False, default=True)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+    updated_at = db.Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
+
+
+class Role(db.Model):
+    """Rôle RBAC centralisé regroupant un ensemble de permissions granulaires (§3 RBAC)."""
+
+    __tablename__ = "rbac_roles"
+
+    id = db.Column(Integer, primary_key=True)
+    code = db.Column(String(50), unique=True, nullable=False, index=True)
+    name = db.Column(String(120), unique=True, nullable=False)
+    description = db.Column(Text, nullable=True)
+    is_active = db.Column(Boolean, nullable=False, default=True)
+    is_system = db.Column(Boolean, nullable=False, default=False)
+    is_global_scope = db.Column(Boolean, nullable=False, default=False)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+    updated_at = db.Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
+
+    role_permissions = db.relationship(
+        "RolePermission",
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+    user_roles = db.relationship(
+        "UserRole",
+        back_populates="role",
+    )
+
+
+class Permission(db.Model):
+    """Permission granulaire associée à un module, une ressource et une action (§4 RBAC)."""
+
+    __tablename__ = "rbac_permissions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('VIEW', 'CREATE', 'UPDATE', 'DELETE', 'VALIDATE', 'EXPORT', 'PRINT', 'MANAGE')",
+            name="ck_rbac_permission_action",
+        ),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    code = db.Column(String(100), unique=True, nullable=False, index=True)
+    module = db.Column(String(60), nullable=False, index=True)
+    module_label = db.Column(String(100), nullable=False)
+    resource = db.Column(String(80), nullable=False)
+    action = db.Column(String(30), nullable=False)
+    description = db.Column(String(255), nullable=False)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+
+class RolePermission(db.Model):
+    """Association entre un rôle et une permission (§5 RBAC)."""
+
+    __tablename__ = "rbac_role_permissions"
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_rbac_role_permission"),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    role_id = db.Column(
+        Integer,
+        ForeignKey("rbac_roles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    permission_id = db.Column(
+        Integer,
+        ForeignKey("rbac_permissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+    role = db.relationship("Role", back_populates="role_permissions")
+    permission = db.relationship("Permission")
+
+
+class UserRole(db.Model):
+    """Attribution d'un ou plusieurs rôles à un utilisateur (§3, §6 RBAC)."""
+
+    __tablename__ = "rbac_user_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_rbac_user_role"),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    user_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role_id = db.Column(
+        Integer,
+        ForeignKey("rbac_roles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    assigned_by_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+    user = db.relationship("User", foreign_keys=[user_id], back_populates="user_roles")
+    role = db.relationship("Role", back_populates="user_roles")
+
+
+class UserPermissionOverride(db.Model):
+    """Permission individuelle exceptionnelle accordée (`ALLOW`) ou retirée (`DENY`) (§6 RBAC)."""
+
+    __tablename__ = "rbac_user_permissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "permission_id", name="uq_rbac_user_permission"),
+        CheckConstraint("effect IN ('ALLOW', 'DENY')", name="ck_rbac_override_effect"),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    user_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    permission_id = db.Column(
+        Integer,
+        ForeignKey("rbac_permissions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    effect = db.Column(String(10), nullable=False, default="ALLOW")
+    reason = db.Column(String(255), nullable=False)
+    granted_by_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    expires_at = db.Column(DateTime, nullable=True)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+    updated_at = db.Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
+
+    user = db.relationship("User", foreign_keys=[user_id], back_populates="permission_overrides")
+    permission = db.relationship("Permission")
+
+
+class UserEstablishmentScope(db.Model):
+    """Périmètre explicite autorisant un utilisateur sur un établissement supplémentaire (§8 RBAC)."""
+
+    __tablename__ = "user_establishment_scopes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "establishment_id", name="uq_user_establishment_scope"),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    user_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+    user = db.relationship("User", back_populates="extra_establishments")
+    establishment = db.relationship("Establishment")
+
+
+class ParentStudentLink(db.Model):
+    """Rattachement d'un compte Parent / Tuteur à ses enfants (§3.8, §7.C RBAC)."""
+
+    __tablename__ = "parent_student_links"
+    __table_args__ = (
+        UniqueConstraint("user_id", "student_id", name="uq_parent_student_link"),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    user_id = db.Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    student_id = db.Column(
+        Integer,
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relationship_label = db.Column(String(60), nullable=False, default="Parent / Tuteur")
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+    user = db.relationship("User", back_populates="parent_links")
+    student = db.relationship("Student")
+
+
 class User(UserMixin, db.Model):
-    """Compte utilisateur et rôle RBAC (§2 et §17 CdC)."""
+    """Compte utilisateur, rôles RBAC, périmètre d'établissement et sécurité (§2, §6, §8, §17)."""
 
     __tablename__ = "users"
     __table_args__ = (
@@ -88,7 +361,17 @@ class User(UserMixin, db.Model):
     full_name = db.Column(String(150), nullable=False)
     password_hash = db.Column(String(255), nullable=False)
     role = db.Column(String(20), nullable=False, default=ROLE_ENSEIGNANT)
+    primary_role_code = db.Column(String(50), nullable=True, index=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="SET NULL"),
+        nullable=True,
+        default=1,
+        index=True,
+    )
     is_active = db.Column(Boolean, nullable=False, default=True)
+    suspended_until = db.Column(DateTime, nullable=True)
+    suspension_reason = db.Column(String(255), nullable=True)
     must_change_password = db.Column(Boolean, nullable=False, default=False)
     failed_login_count = db.Column(Integer, nullable=False, default=0)
     locked_until = db.Column(DateTime, nullable=True)
@@ -96,11 +379,46 @@ class User(UserMixin, db.Model):
     created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
     updated_at = db.Column(DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
 
+    establishment = db.relationship("Establishment", foreign_keys=[establishment_id])
     class_assignments = db.relationship(
         "TeacherClassAssignment",
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    user_roles = db.relationship(
+        "UserRole",
+        foreign_keys="UserRole.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    permission_overrides = db.relationship(
+        "UserPermissionOverride",
+        foreign_keys="UserPermissionOverride.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    extra_establishments = db.relationship(
+        "UserEstablishmentScope",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    parent_links = db.relationship(
+        "ParentStudentLink",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    @validates("role")
+    def _validate_and_sync_legacy_role(self, _key: str, value: str) -> str:
+        code = (value or ROLE_ENSEIGNANT).strip().upper()
+        self.primary_role_code = code
+        if code in (ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ADMIN_ETAB):
+            return ROLE_ADMIN
+        if code == ROLE_DIRECTEUR:
+            return ROLE_DIRECTEUR
+        if code == ROLE_ENSEIGNANT:
+            return ROLE_ENSEIGNANT
+        return ROLE_CONSULTATION
 
     def set_password(self, raw_password: str) -> None:
         self.password_hash = generate_password_hash(raw_password, method="scrypt")
@@ -112,12 +430,54 @@ class User(UserMixin, db.Model):
         ref = now or utcnow_naive()
         return bool(self.locked_until and self.locked_until > ref)
 
+    def is_suspended(self, now: datetime | None = None) -> bool:
+        ref = now or utcnow_naive()
+        return bool(self.suspended_until and self.suspended_until > ref)
+
+    @property
+    def active_roles(self) -> list["Role"]:
+        return [ur.role for ur in self.user_roles if ur.role and ur.role.is_active]
+
+    @property
+    def active_role_codes(self) -> set[str]:
+        return set(self.effective_role_codes)
+
+    @property
+    def establishment_scopes(self) -> list["UserEstablishmentScope"]:
+        return list(self.extra_establishments)
+
+    @property
+    def effective_role_codes(self) -> list[str]:
+        if self.user_roles:
+            codes = [ur.role.code for ur in self.user_roles if ur.role and ur.role.is_active]
+            return codes
+        fallback = (self.primary_role_code or self.role or "").strip().upper()
+        if fallback == ROLE_ADMIN:
+            return [ROLE_SUPER_ADMIN]
+        return [fallback] if fallback else []
+
     def has_role(self, *roles: str) -> bool:
-        return self.role in roles
+        wanted = {r.strip().upper() for r in roles}
+        if ROLE_ADMIN in wanted:
+            wanted.update({ROLE_SUPER_ADMIN, ROLE_ADMIN_ETAB})
+        current = set(self.effective_role_codes)
+        if self.role:
+            current.add(self.role.upper())
+        if self.primary_role_code:
+            current.add(self.primary_role_code.upper())
+        return bool(current & wanted)
 
     @property
     def role_label(self) -> str:
-        return ROLE_LABELS.get(self.role, self.role)
+        if self.user_roles:
+            active_names = [ur.role.name for ur in self.user_roles if ur.role and ur.role.is_active]
+            if active_names:
+                return ", ".join(active_names)
+            inactive_names = [f"{ur.role.name} (inactif)" for ur in self.user_roles if ur.role]
+            if inactive_names:
+                return ", ".join(inactive_names)
+        code = (self.primary_role_code or self.role or "").upper()
+        return ROLE_LABELS.get(code, code)
 
 
 class EstablishmentSettings(db.Model):
@@ -186,6 +546,13 @@ class SchoolYear(db.Model):
     )
 
     id = db.Column(Integer, primary_key=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="RESTRICT"),
+        nullable=True,
+        default=1,
+        index=True,
+    )
     label = db.Column(String(32), unique=True, nullable=False)
     start_date = db.Column(Date, nullable=True)
     end_date = db.Column(Date, nullable=True)
@@ -228,6 +595,13 @@ class AcademicClass(db.Model):
     )
 
     id = db.Column(Integer, primary_key=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="RESTRICT"),
+        nullable=True,
+        default=1,
+        index=True,
+    )
     school_year_id = db.Column(
         Integer,
         ForeignKey("school_years.id", ondelete="RESTRICT"),
@@ -462,6 +836,13 @@ class Student(db.Model):
     )
 
     id = db.Column(Integer, primary_key=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="RESTRICT"),
+        nullable=True,
+        default=1,
+        index=True,
+    )
     unique_code = db.Column(String(40), unique=True, nullable=False, index=True)
     last_name = db.Column(String(100), nullable=False)
     first_names = db.Column(String(150), nullable=False)
@@ -644,21 +1025,82 @@ class StudentPeriodObservation(db.Model):
 
 
 class AuditLog(db.Model):
-    """Journal de sécurité et des opérations sensibles (§17 CdC)."""
+    """Journal de sécurité et des opérations sensibles (§9 RBAC & §17 CdC)."""
 
     __tablename__ = "audit_logs"
 
     id = db.Column(Integer, primary_key=True)
     created_at = db.Column(DateTime, nullable=False, default=utcnow_naive, index=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="SET NULL"),
+        nullable=True,
+        default=1,
+        index=True,
+    )
     user_id = db.Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     username_snapshot = db.Column(String(64), nullable=False, default="système")
-    role_snapshot = db.Column(String(20), nullable=True)
+    role_snapshot = db.Column(String(120), nullable=True)
     ip_address = db.Column(String(64), nullable=True)
+    module = db.Column(String(60), nullable=True, default="system", index=True)
     action = db.Column(String(60), nullable=False, index=True)
+    status = db.Column(String(20), nullable=True, default="SUCCESS", index=True)
     target_type = db.Column(String(60), nullable=True)
     target_id = db.Column(String(60), nullable=True)
     summary = db.Column(String(300), nullable=False)
     details_json = db.Column(Text, nullable=True)
+
+
+class StudentAbsenceRecord(db.Model):
+    """Suivi des absences, retards et discipline d'un élève (§3.7, §4 RBAC)."""
+
+    __tablename__ = "student_absence_records"
+
+    id = db.Column(Integer, primary_key=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="CASCADE"),
+        nullable=False,
+        default=1,
+        index=True,
+    )
+    enrollment_id = db.Column(
+        Integer,
+        ForeignKey("class_enrollments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_date = db.Column(Date, nullable=False, index=True)
+    event_type = db.Column(String(30), nullable=False, default="ABSENCE")
+    justified = db.Column(Boolean, nullable=False, default=False)
+    notes = db.Column(String(255), nullable=True)
+    recorded_by_id = db.Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
+
+    enrollment = db.relationship("ClassEnrollment")
+
+
+class AccountingEntry(db.Model):
+    """Écriture comptable d'établissement : frais scolaires, paiements, dépenses (§3.6, §4 RBAC)."""
+
+    __tablename__ = "accounting_entries"
+
+    id = db.Column(Integer, primary_key=True)
+    establishment_id = db.Column(
+        Integer,
+        ForeignKey("establishments.id", ondelete="CASCADE"),
+        nullable=False,
+        default=1,
+        index=True,
+    )
+    entry_date = db.Column(Date, nullable=False, index=True)
+    entry_type = db.Column(String(30), nullable=False, default="PAIEMENT")
+    reference = db.Column(String(60), nullable=False)
+    label = db.Column(String(200), nullable=False)
+    amount = db.Column(Numeric(12, 2), nullable=False)
+    is_validated = db.Column(Boolean, nullable=False, default=False)
+    recorded_by_id = db.Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(DateTime, nullable=False, default=utcnow_naive)
 
 
 class BackupRecord(db.Model):

@@ -104,7 +104,7 @@
                         <td>
                             <input type="text" name="d_obs_{{ enr.id }}" class="form-control form-control-sm"
                                    value="{{ ob.director_observation if ob and ob.director_observation else '' }}"
-                                   {% if not can_edit or current_user.role not in (ROLE_ADMIN, ROLE_DIRECTEUR) %}disabled{% endif %}>
+                                   {% if not can_edit or not can_perm('grades.validate') %}disabled{% endif %}>
                         </td>
                         <td>
                             <input type="text" name="mention_{{ enr.id }}" class="form-control form-control-sm"
@@ -115,7 +115,7 @@
                         <td>
                             <input type="text" name="decision_{{ enr.id }}" class="form-control form-control-sm"
                                    value="{{ enr.annual_decision or '' }}" placeholder="ex. Admis en CM2"
-                                   {% if not can_edit or current_user.role not in (ROLE_ADMIN, ROLE_DIRECTEUR) %}disabled{% endif %}>
+                                   {% if not can_edit or not can_perm('bulletins.validate') %}disabled{% endif %}>
                         </td>
                         {% endif %}
                     </tr>

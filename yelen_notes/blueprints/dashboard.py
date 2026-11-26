@@ -14,33 +14,46 @@ from yelen_notes.models import (
     SchoolYear,
     Subject,
 )
-from yelen_notes.security import get_accessible_classes_query
+from yelen_notes.security import (
+    get_accessible_classes_query,
+    get_accessible_years_query,
+    has_permission,
+    is_strictly_scoped_parent,
+    permission_required,
+    user_can_access_establishment,
+)
 from yelen_notes.services.calculation_service import compute_period_class_results
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
 def get_selected_school_year() -> SchoolYear | None:
-    """Détermine l'année scolaire consultée en session, ou à défaut l'année active de l'établissement."""
+    """Détermine l'année scolaire consultée en session dans le périmètre d'établissement autorisé."""
+    is_auth = getattr(current_user, "is_authenticated", False)
     sess_year_id = session.get("selected_school_year_id")
     if sess_year_id:
         yr = db.session.get(SchoolYear, int(sess_year_id))
-        if yr is not None:
+        if yr is not None and (not is_auth or user_can_access_establishment(current_user, yr.establishment_id)):
             return yr
     settings = EstablishmentSettings.get_singleton()
     if settings.active_school_year_id:
         yr = db.session.get(SchoolYear, settings.active_school_year_id)
-        if yr is not None:
+        if yr is not None and (not is_auth or user_can_access_establishment(current_user, yr.establishment_id)):
             return yr
+    if is_auth:
+        return get_accessible_years_query(current_user).first()
     return SchoolYear.query.order_by(SchoolYear.id.desc()).first()
 
 
 @dashboard_bp.route("/")
-@login_required
+@permission_required("dashboard.view", module="dashboard")
 def index():
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
+
     settings = EstablishmentSettings.get_singleton()
     selected_year = get_selected_school_year()
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
 
     # Calcul de l'état du guide de démarrage (utile sur une base vierge)
     has_school_info = bool((settings.school_name or "").strip())
@@ -102,7 +115,9 @@ def index():
             "url": url_for("students.students_list"),
         },
     ]
-    setup_complete = all(s["done"] for s in setup_steps)
+    setup_complete = all(s["done"] for s in setup_steps) or not has_permission(
+        current_user, "settings.update"
+    )
 
     # Classe sélectionnée sur le tableau de bord
     requested_class_id = request.args.get("class_id", type=int)
@@ -190,6 +205,8 @@ def switch_view_year():
     if year_id:
         yr = db.session.get(SchoolYear, year_id)
         if yr is not None:
+            if not user_can_access_establishment(current_user, yr.establishment_id):
+                return redirect(url_for("dashboard.index"))
             session["selected_school_year_id"] = yr.id
             flash(f"Année scolaire affichée : {yr.label}.", "info")
     ref = request.referrer or url_for("dashboard.index")

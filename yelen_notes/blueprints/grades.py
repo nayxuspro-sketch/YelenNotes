@@ -21,9 +21,13 @@ from yelen_notes.models import (
     Subject,
 )
 from yelen_notes.security import (
+    any_permission_required,
     get_accessible_classes_query,
+    has_any_permission,
+    has_permission,
+    is_strictly_scoped_teacher,
+    permission_required,
     record_audit_log,
-    roles_required,
     user_can_edit_grades,
     user_can_view_class,
 )
@@ -73,7 +77,7 @@ def _resolve_class_and_period():
 
 
 @grades_bp.route("/notes")
-@login_required
+@permission_required("grades.view", module="grades")
 def grade_entry():
     selected_year, classes, periods, selected_class, selected_period = _resolve_class_and_period()
     subject_filter_id = request.args.get("subject_id", type=int)
@@ -149,7 +153,7 @@ def grade_entry():
 
 
 @grades_bp.route("/notes/api/cellule", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR, ROLE_ENSEIGNANT)
+@any_permission_required("grades.create", "grades.update", module="grades")
 def api_save_cell():
     """API JSON d'enregistrement unitaire rapide avec contrôle CSRF, barème et conflit multiposte."""
     payload = request.get_json(silent=True) or {}
@@ -232,7 +236,7 @@ def api_save_cell():
 
 
 @grades_bp.route("/notes/enregistrer-grille", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR, ROLE_ENSEIGNANT)
+@any_permission_required("grades.create", "grades.update", module="grades")
 def save_grid_form():
     """Enregistrement groupé explicite du formulaire complet de notes (§8.2 CdC)."""
     class_id = request.form.get("class_id", type=int)
@@ -316,7 +320,7 @@ def save_grid_form():
 
 
 @grades_bp.route("/notes/observations", methods=["GET", "POST"])
-@login_required
+@permission_required("grades.view", module="grades")
 def period_observations():
     selected_year, classes, periods, selected_class, selected_period = _resolve_class_and_period()
     scope = request.args.get("scope") or request.form.get("scope") or "PERIODE"
@@ -324,13 +328,11 @@ def period_observations():
         scope = "PERIODE"
 
     can_edit = False
+    can_validate_director = has_permission(current_user, "grades.validate")
     if selected_class:
         if scope == "ANNUEL":
             can_edit = (
-                current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
-                and not selected_class.school_year.is_closed
-            ) or (
-                current_user.role == ROLE_ENSEIGNANT
+                has_any_permission(current_user, "grades.create", "grades.update")
                 and user_can_view_class(current_user, selected_class.id)
                 and not selected_class.school_year.is_closed
             )
@@ -346,11 +348,11 @@ def period_observations():
             t_obs = request.form.get(f"t_obs_{enr.id}")
             d_obs = (
                 request.form.get(f"d_obs_{enr.id}")
-                if current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+                if can_validate_director
                 else None
             )
             mention = request.form.get(f"mention_{enr.id}")
-            if current_user.role == ROLE_ENSEIGNANT:
+            if not can_validate_director:
                 # Préserver l'observation éventuelle du directeur
                 existing = StudentPeriodObservation.query.filter_by(
                     enrollment_id=enr.id,
@@ -369,7 +371,7 @@ def period_observations():
                 actor=current_user,
                 commit=False,
             )
-            if scope == "ANNUEL" and current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR):
+            if scope == "ANNUEL" and has_permission(current_user, "bulletins.validate"):
                 dec = (request.form.get(f"decision_{enr.id}") or "").strip()
                 enr.annual_decision = dec[:40] or None
 
@@ -431,7 +433,7 @@ def period_observations():
 
 
 @grades_bp.route("/notes/historique")
-@login_required
+@permission_required("grades.view", module="grades")
 def grade_history_view():
     """Consultation de l'historique horodaté des saisies et corrections de notes (§8.2 CdC)."""
     selected_year, classes, periods, selected_class, selected_period = _resolve_class_and_period()

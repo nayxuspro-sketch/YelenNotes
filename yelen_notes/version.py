@@ -3,7 +3,7 @@
 from pathlib import Path
 
 APP_NAME = "Yelen Notes"
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 
 def get_app_version(program_root: Path | None = None) -> str:

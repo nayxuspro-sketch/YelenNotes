@@ -28,9 +28,14 @@ from yelen_notes.models import (
     Subject,
 )
 from yelen_notes.security import (
+    any_permission_required,
     get_accessible_classes_query,
+    get_accessible_years_query,
+    has_permission,
+    is_strictly_scoped_teacher,
+    permission_required,
     record_audit_log,
-    roles_required,
+    user_can_access_establishment,
     user_can_manage_class_subjects,
     user_can_view_class,
 )
@@ -56,12 +61,14 @@ def _parse_dec(raw: str | None, field_label: str) -> Decimal:
 
 
 @academics_bp.route("/classes", methods=["GET", "POST"])
-@login_required
+@permission_required("classes.view", module="classes")
 def classes_list():
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
     year_id = request.args.get("year_id", type=int) or request.form.get("year_id", type=int)
     selected_year = db.session.get(SchoolYear, year_id) if year_id else get_selected_school_year()
-    can_edit = current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+    if selected_year and not user_can_access_establishment(current_user, selected_year.establishment_id):
+        abort(403)
+    can_edit = has_permission(current_user, "classes.create")
 
     if request.method == "POST":
         if not can_edit or selected_year is None:
@@ -87,6 +94,7 @@ def classes_list():
             return redirect(url_for("academics.classes_list", year_id=selected_year.id))
 
         ac = AcademicClass(
+            establishment_id=selected_year.establishment_id or 1,
             school_year_id=selected_year.id,
             name=name,
             level_label=level_label,
@@ -102,7 +110,7 @@ def classes_list():
         copied_count = 0
         if copy_subjects_from_id:
             source_cls = db.session.get(AcademicClass, copy_subjects_from_id)
-            if source_cls is not None:
+            if source_cls is not None and user_can_access_establishment(current_user, source_cls.establishment_id):
                 for subj in source_cls.subjects:
                     db.session.add(
                         Subject(
@@ -140,7 +148,11 @@ def classes_list():
         if selected_year
         else []
     )
-    all_existing_classes = AcademicClass.query.order_by(AcademicClass.id.desc()).all() if can_edit else []
+    all_existing_classes = (
+        get_accessible_classes_query(current_user).all()
+        if can_edit
+        else []
+    )
     return render_template(
         "academics/classes.html",
         all_years=all_years,
@@ -152,9 +164,11 @@ def classes_list():
 
 
 @academics_bp.route("/classes/<int:class_id>/modifier", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("classes.update", module="classes")
 def update_class(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
+    if not user_can_access_establishment(current_user, ac.establishment_id or ac.school_year.establishment_id):
+        abort(403)
     if ac.school_year.is_closed:
         flash("L'année scolaire est clôturée : les informations historisées de la classe sont figées.", "danger")
         return redirect(url_for("academics.classes_list", year_id=ac.school_year_id))
@@ -200,7 +214,7 @@ def update_class(class_id: int):
 
 
 @academics_bp.route("/matieres-et-baremes")
-@login_required
+@permission_required("subjects.view", module="subjects")
 def subjects_entry_shortcut():
     """Accès direct aux matières et barèmes de la classe accessible de l'utilisateur."""
     selected_year = get_selected_school_year()
@@ -215,7 +229,7 @@ def subjects_entry_shortcut():
 
 
 @academics_bp.route("/classes/<int:class_id>/matieres", methods=["GET", "POST"])
-@login_required
+@permission_required("subjects.view", module="subjects")
 def class_subjects(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
     if not user_can_view_class(current_user, ac.id):
@@ -231,18 +245,26 @@ def class_subjects(class_id: int):
     default_ref_scale = policy.general_average_scale if policy else Decimal("10.00")
 
     if request.method == "POST":
-        if not can_edit:
+        if not can_edit or not has_permission(current_user, "subjects.create"):
             record_audit_log(
                 "ACCESS_DENIED",
-                f"Ajout/copie de matière refusé sur {ac.name} pour {current_user.username} ({current_user.role})",
+                f"Ajout/copie de matière refusé sur {ac.name} pour {current_user.username} ({current_user.role_label})",
+                module="subjects",
+                status="DENIED",
                 commit=True,
             )
             abort(403)
 
         if request.form.get("action") == "copy_subjects":
+            if not has_permission(current_user, "subjects.create"):
+                abort(403)
             source_id = request.form.get("source_class_id", type=int)
             source_cls = db.session.get(AcademicClass, source_id) if source_id else None
-            if source_cls is None or source_cls.id == ac.id:
+            if (
+                source_cls is None
+                or source_cls.id == ac.id
+                or not user_can_access_establishment(current_user, source_cls.establishment_id)
+            ):
                 flash("Veuillez sélectionner une classe source valide.", "danger")
                 return redirect(url_for("academics.class_subjects", class_id=ac.id))
 
@@ -361,14 +383,17 @@ def class_subjects(class_id: int):
     subjects = Subject.query.filter_by(class_id=ac.id).order_by(Subject.display_order, Subject.name).all()
     accessible_classes = get_accessible_classes_query(current_user, ac.school_year_id).all()
     copyable_classes = (
-        AcademicClass.query.join(SchoolYear)
-        .filter(AcademicClass.id != ac.id)
-        .order_by(SchoolYear.label.desc(), AcademicClass.display_order, AcademicClass.name)
-        .all()
+        [
+            c
+            for c in AcademicClass.query.join(SchoolYear)
+            .filter(AcademicClass.id != ac.id)
+            .order_by(SchoolYear.label.desc(), AcademicClass.display_order, AcademicClass.name)
+            .all()
+            if user_can_access_establishment(current_user, c.establishment_id) and len(c.subjects) > 0
+        ]
         if can_edit
         else []
     )
-    copyable_classes = [c for c in copyable_classes if len(c.subjects) > 0]
     return render_template(
         "academics/subjects.html",
         academic_class=ac,
@@ -382,7 +407,7 @@ def class_subjects(class_id: int):
 
 
 @academics_bp.route("/matieres/<int:subject_id>/modifier", methods=["POST"])
-@login_required
+@permission_required("subjects.update", module="subjects")
 def update_subject(subject_id: int):
     subj = db.get_or_404(Subject, subject_id)
     ac = subj.academic_class
@@ -446,11 +471,13 @@ def update_subject(subject_id: int):
 
 
 @academics_bp.route("/regles-et-appreciations", methods=["GET", "POST"])
-@login_required
+@permission_required("subjects.view", module="subjects")
 def policies_and_scales():
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
     year_id = request.args.get("year_id", type=int) or request.form.get("year_id", type=int)
     selected_year = db.session.get(SchoolYear, year_id) if year_id else get_selected_school_year()
+    if selected_year and not user_can_access_establishment(current_user, selected_year.establishment_id):
+        abort(403)
 
     year_classes = (
         get_accessible_classes_query(current_user, selected_year.id).all()
@@ -466,7 +493,7 @@ def policies_and_scales():
     if (
         raw_class_id is None
         and request.method == "GET"
-        and current_user.role == ROLE_ENSEIGNANT
+        and is_strictly_scoped_teacher(current_user)
         and request.args.get("scope") != "year"
         and year_classes
     ):
@@ -483,7 +510,7 @@ def policies_and_scales():
     if target_class is not None and not user_can_view_class(current_user, target_class.id):
         record_audit_log(
             "ACCESS_DENIED",
-            f"Accès refusé aux barèmes de {target_class.name} pour {current_user.username} ({current_user.role})",
+            f"Accès refusé aux barèmes de {target_class.name} pour {current_user.username} ({current_user.role_label})",
             commit=True,
         )
         abort(403)
@@ -492,7 +519,7 @@ def policies_and_scales():
         can_edit = user_can_manage_class_subjects(current_user, target_class)
     else:
         can_edit = (
-            current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+            has_permission(current_user, "subjects.manage")
             and selected_year is not None
             and not selected_year.is_closed
         )

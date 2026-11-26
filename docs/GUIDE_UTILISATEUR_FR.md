@@ -19,14 +19,28 @@ Lors du tout premier lancement de Yelen Notes sur l'ordinateur de l'école :
 
 ---
 
-## 2. Profils utilisateurs et droits d'accès
+## 2. Gestion centralisée des rôles et permissions (RBAC)
 
-| Profil | Actions autorisées |
+Yelen Notes intègre un moteur d'autorisation centralisé fondé sur le **principe du moindre privilège** et le **refus par défaut (*Default Deny*)** : aucune fonctionnalité ni donnée n'est accessible sans autorisation explicite.
+
+### 2.1. Rôles prédéfinis et personnalisables
+Dans **Administration → Gestion des rôles & permissions**, 8 rôles métier prédéfinis sont fournis et entièrement personnalisables (en plus de la création libre de nouveaux rôles) :
+
+| Rôle | Périmètre par défaut |
 |---|---|
-| **Administrateur** | Accès complet : paramètres, utilisateurs, affectations, sauvegardes, restaurations et journaux de sécurité. |
-| **Directeur / Directrice** | Paramètres pédagogiques, années, périodes (ouverture/clôture), classes, matières, élèves, notes, classements, bulletins PDF et sauvegardes manuelles. |
-| **Enseignant titulaire** | Consultation et **modification des identités et des informations scolaires des élèves**, **ajout et paramétrage des matières, coefficients et barèmes** de ses classes affectées (tant que l'année scolaire est ouverte), saisie/modification des notes lorsque la période a le statut **OUVERTE**, saisie des observations et impression des relevés/bulletins de ses classes. |
-| **Consultation** | Lecture et impression des relevés, classements et bulletins autorisés, sans aucune modification possible. |
+| **Super administrateur (`SUPER_ADMIN`)** | Accès complet global à tous les modules, rôles, matrices de permissions, établissements, sauvegardes/restaurations et journaux d'audit. |
+| **Administrateur d'établissement (`ADMIN_ETABLISSEMENT`)** | Administration complète au sein de son établissement autorisé (strictement isolé des autres établissements). |
+| **Directeur / Directrice (`DIRECTEUR`)** | Pilotage pédagogique et administratif de l'établissement : années, périodes (ouverture/clôture), classes, barèmes, élèves, notes, bulletins PDF, proposition de fin d'année, suivi des absences et lecture comptable/audit. |
+| **Secrétaire (`SECRETAIRE`)** | Gestion administrative des élèves, inscriptions, classes, absences et saisie de pièces comptables courantes, sans validation pédagogique finale. |
+| **Enseignant (`ENSEIGNANT`)** | Périmètre strictement limité à ses classes affectées : identités/infos des élèves, ajout et paramétrage des matières et barèmes de sa classe, saisie des notes en période **OUVERTE**, observations, absences et édition des relevés/bulletins de sa classe. |
+| **Comptable (`COMPTABLE`)** | Gestion et export des opérations financières dans **Comptabilité scolaire**, sans aucun accès aux données pédagogiques confidentielles (notes, relevés, bulletins, propositions). |
+| **Surveillant (`SURVEILLANT`)** | Enregistrement et justification des absences, retards et observations de discipline dans **Absences & Discipline**. |
+| **Parent / Tuteur (`PARENT`)** | Accès exclusif à l'**Espace Parent / Tuteur** pour consulter les moyennes, observations, absences et télécharger les bulletins PDF de ses seuls enfants rattachés. |
+
+### 2.2. Matrice des permissions, cumul de rôles et surcharges auditées
+- **Matrice interactive :** chaque module fonctionnel est découpé en permissions granulaires (`Consulter`, `Créer`, `Modifier`, `Supprimer`, `Valider`, `Exporter`, `Imprimer`, `Administrer`), modifiables par cases à cocher avec **effet immédiat** sur les sessions actives.
+- **Cumul de rôles et exceptions individuelles :** un compte utilisateur peut cumuler plusieurs rôles et recevoir exceptionnellement une surcharge individuelle motivée (`ALLOW` ou `DENY`, où `DENY` prime toujours).
+- **Sécurité et traçabilité :** interdiction d'auto-élévation de privilèges, blocage immédiat des comptes désactivés ou suspendus temporairement, et journalisation en lecture seule de toutes les connexions, modifications RBAC et tentatives refusées.
 
 ---
 
