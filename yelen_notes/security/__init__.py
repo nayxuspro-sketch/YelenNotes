@@ -135,6 +135,24 @@ def user_can_view_class(user: User, class_id: int) -> bool:
     return False
 
 
+def user_can_edit_class_students(user: User, academic_class: AcademicClass | None) -> bool:
+    """Vérifie si l'utilisateur peut modifier les identités et informations des élèves de la classe."""
+    if academic_class is None or not user.is_authenticated or not user.is_active:
+        return False
+    if academic_class.school_year.is_closed:
+        return False
+    if user.role in (ROLE_ADMIN, ROLE_DIRECTEUR):
+        return True
+    if user.role == ROLE_ENSEIGNANT:
+        if not academic_class.is_active:
+            return False
+        assignment = TeacherClassAssignment.query.filter_by(
+            user_id=user.id, class_id=academic_class.id
+        ).first()
+        return bool(assignment and assignment.can_edit_grades)
+    return False
+
+
 def user_can_edit_grades(
     user: User, academic_class: AcademicClass, period: EvaluationPeriod
 ) -> tuple[bool, str]:

@@ -10,8 +10,11 @@ from yelen_notes.extensions import db
 from yelen_notes.models import (
     STATUS_CLOTUREE,
     AcademicClass,
+    AuditLog,
+    ClassEnrollment,
     EvaluationPeriod,
     GradeHistory,
+    SchoolYear,
     Subject,
     User,
 )
@@ -238,3 +241,179 @@ def test_bruteforce_lockout_and_admin_cli_recovery(app, client, configured_schoo
         follow_redirects=True,
     )
     assert ok_resp.status_code == 200
+
+
+def test_teacher_can_edit_assigned_class_student_identities_and_info(app, client, configured_school):
+    """Vérifie que le titulaire peut modifier l'identité et les infos des élèves de sa classe uniquement."""
+    with app.app_context():
+        cm2 = db.session.get(AcademicClass, configured_school["cm2_id"])
+        ce1 = db.session.get(AcademicClass, configured_school["ce1_id"])
+        enr_cm2_1 = create_and_enroll_student(
+            academic_class=cm2,
+            last_name="ZONGO",
+            first_names="ibrahim",
+            sex="M",
+            birth_date=date(2015, 5, 10),
+            schooling_status="Ancienne mention",
+        )
+        enr_cm2_2 = create_and_enroll_student(
+            academic_class=cm2,
+            last_name="BATIONO",
+            first_names="Awa",
+            sex="F",
+            birth_date=date(2015, 11, 20),
+        )
+        enr_ce1 = create_and_enroll_student(
+            academic_class=ce1,
+            last_name="KABORÉ",
+            first_names="Salif",
+            sex="M",
+            birth_date=date(2018, 2, 14),
+        )
+        cm2_id = cm2.id
+        ce1_id = ce1.id
+        enr_cm2_1_id = enr_cm2_1.id
+        enr_cm2_2_id = enr_cm2_2.id
+        enr_ce1_id = enr_ce1.id
+
+    # Connexion du titulaire affecté à CM2
+    _login_client(client, "titulaire_cm2", "Titulaire2026!")
+
+    # 1. Modification individuelle (identité complète + informations scolaires) sur un élève de CM2 -> 200 OK
+    detail_page = client.get(f"/eleves/{enr_cm2_1_id}")
+    assert detail_page.status_code == 200
+    assert "Modification autorisée" in detail_page.data.decode("utf-8")
+    tok = extract_csrf_token(detail_page.data)
+
+    upd_resp = client.post(
+        f"/eleves/{enr_cm2_1_id}",
+        data={
+            "csrf_token": tok,
+            "roll_number": "1",
+            "unique_code": "MAT-CM2-0001",
+            "last_name": "sawadogo",
+            "first_names": "ibrahim wendkouni",
+            "sex": "M",
+            "birth_date": "2014-08-15",
+            "schooling_status": "6e année",
+            "repeated_class_detail": "CM2 (2025-2026)",
+            "observations": "État civil vérifié sur extrait de naissance",
+            "action": "save_and_next",
+        },
+        follow_redirects=False,
+    )
+    # Redirection directe vers l'élève suivant grâce à save_and_next
+    assert upd_resp.status_code == 302
+    assert f"/eleves/{enr_cm2_2_id}" in upd_resp.headers["Location"]
+
+    with app.app_context():
+        refreshed = db.session.get(ClassEnrollment, enr_cm2_1_id)
+        assert refreshed.student.unique_code == "MAT-CM2-0001"
+        assert refreshed.student.last_name == "SAWADOGO"
+        assert refreshed.student.first_names == "Ibrahim Wendkouni"
+        assert refreshed.student.birth_date == date(2014, 8, 15)
+        assert refreshed.schooling_status == "6e année"
+        assert refreshed.repeated_class_detail == "CM2 (2025-2026)"
+        assert refreshed.observations == "État civil vérifié sur extrait de naissance"
+        assert AuditLog.query.filter_by(action="STUDENT_UPDATE", target_id=str(enr_cm2_1_id)).count() == 1
+
+    # 2. Modification groupée via le tableau rapide de la classe CM2 + renumérotation alphabétique -> OK
+    bulk_get = client.get(f"/eleves/modifier-liste/{cm2_id}")
+    assert bulk_get.status_code == 200
+    tok_bulk = extract_csrf_token(bulk_get.data)
+    bulk_post = client.post(
+        f"/eleves/modifier-liste/{cm2_id}",
+        data={
+            "csrf_token": tok_bulk,
+            f"enr_{enr_cm2_1_id}_roll_number": "1",
+            f"enr_{enr_cm2_1_id}_unique_code": "MAT-CM2-0001",
+            f"enr_{enr_cm2_1_id}_last_name": "SAWADOGO",
+            f"enr_{enr_cm2_1_id}_first_names": "Ibrahim Wendkouni",
+            f"enr_{enr_cm2_1_id}_sex": "M",
+            f"enr_{enr_cm2_1_id}_birth_date": "2014-08-15",
+            f"enr_{enr_cm2_1_id}_schooling_status": "6e année",
+            f"enr_{enr_cm2_1_id}_repeated_class_detail": "CM2 (2025-2026)",
+            f"enr_{enr_cm2_1_id}_observations": "État civil vérifié sur extrait de naissance",
+            f"enr_{enr_cm2_2_id}_roll_number": "2",
+            f"enr_{enr_cm2_2_id}_unique_code": "MAT-CM2-0002",
+            f"enr_{enr_cm2_2_id}_last_name": "BATIONO",
+            f"enr_{enr_cm2_2_id}_first_names": "Awa",
+            f"enr_{enr_cm2_2_id}_sex": "F",
+            f"enr_{enr_cm2_2_id}_birth_date": "2015-11-20",
+            f"enr_{enr_cm2_2_id}_schooling_status": "6e année",
+            f"enr_{enr_cm2_2_id}_repeated_class_detail": "",
+            f"enr_{enr_cm2_2_id}_observations": "RAS",
+        },
+        follow_redirects=True,
+    )
+    assert bulk_post.status_code == 200
+    assert "1 élève(s) ont été mises à jour" in bulk_post.data.decode("utf-8")
+
+    renum_resp = client.post(
+        f"/eleves/renumeroter/{cm2_id}",
+        data={"csrf_token": tok_bulk},
+        follow_redirects=True,
+    )
+    assert renum_resp.status_code == 200
+    with app.app_context():
+        # BATIONO passe N° 1 et SAWADOGO N° 2 après renumérotation alphabétique
+        assert db.session.get(ClassEnrollment, enr_cm2_2_id).roll_number == 1
+        assert db.session.get(ClassEnrollment, enr_cm2_1_id).roll_number == 2
+
+    # 3. Isolation stricte : le titulaire de CM2 NE PEUT PAS modifier un élève de CE1 ni désactiver un élève
+    assert client.get(f"/eleves/{enr_ce1_id}").status_code == 403
+    assert client.post(
+        f"/eleves/{enr_ce1_id}",
+        data={
+            "csrf_token": tok_bulk,
+            "last_name": "PIRATE",
+            "first_names": "Test",
+            "sex": "M",
+            "birth_date": "2018-02-14",
+        },
+    ).status_code == 403
+    assert client.get(f"/eleves/modifier-liste/{ce1_id}").status_code == 403
+    assert client.post(f"/eleves/{enr_cm2_1_id}/statut", data={"csrf_token": tok_bulk, "is_active": "0"}).status_code == 403
+
+    # 4. Profil CONSULTATION : lecture seule, aucune modification possible (403)
+    client.post("/deconnexion", data={"csrf_token": tok_bulk})
+    _login_client(client, "lecteur", "Lecteur2026!")
+    ro_page = client.get(f"/eleves/{enr_cm2_1_id}")
+    assert ro_page.status_code == 200
+    assert "Lecture seule" in ro_page.data.decode("utf-8")
+    tok_ro = extract_csrf_token(ro_page.data)
+    assert client.post(
+        f"/eleves/{enr_cm2_1_id}",
+        data={
+            "csrf_token": tok_ro,
+            "last_name": "TEST",
+            "first_names": "Test",
+            "sex": "M",
+            "birth_date": "2014-08-15",
+        },
+    ).status_code == 403
+    assert client.get(f"/eleves/modifier-liste/{cm2_id}").status_code == 403
+
+    # 5. Année scolaire clôturée : même le titulaire ne peut plus modifier la fiche (403)
+    client.post("/deconnexion", data={"csrf_token": tok_ro})
+    with app.app_context():
+        yr = db.session.get(SchoolYear, configured_school["year_id"])
+        yr.status = STATUS_CLOTUREE
+        db.session.commit()
+
+    _login_client(client, "titulaire_cm2", "Titulaire2026!")
+    closed_page = client.get(f"/eleves/{enr_cm2_1_id}")
+    assert closed_page.status_code == 200
+    assert "Lecture seule" in closed_page.data.decode("utf-8")
+    tok_closed = extract_csrf_token(closed_page.data)
+    assert client.post(
+        f"/eleves/{enr_cm2_1_id}",
+        data={
+            "csrf_token": tok_closed,
+            "last_name": "MODIF",
+            "first_names": "Impossible",
+            "sex": "M",
+            "birth_date": "2014-08-15",
+        },
+    ).status_code == 403
+

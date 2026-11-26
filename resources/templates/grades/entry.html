@@ -141,7 +141,13 @@
                     {% set enr = row.enrollment %}
                     <tr>
                         <td class="text-center fw-semibold">{{ enr.roll_number }}</td>
-                        <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                        <td class="fw-semibold">
+                            <a href="{{ url_for('students.student_detail', enrollment_id=enr.id) }}"
+                               class="text-decoration-none text-reset"
+                               title="Ouvrir ou modifier l'identité / la fiche de l'élève">
+                                {{ enr.student.full_name }}
+                            </a>
+                        </td>
                         <td class="text-center">{{ enr.student.sex }}</td>
 
                         {% for subj in displayed_subjects %}

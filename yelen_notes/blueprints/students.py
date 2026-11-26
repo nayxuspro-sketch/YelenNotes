@@ -23,6 +23,7 @@ from yelen_notes.security import (
     get_accessible_classes_query,
     record_audit_log,
     roles_required,
+    user_can_edit_class_students,
     user_can_view_class,
 )
 from yelen_notes.services.excel_service import (
@@ -33,12 +34,10 @@ from yelen_notes.services.excel_service import (
 from yelen_notes.services.student_service import (
     StudentValidationError,
     create_and_enroll_student,
-    normalize_first_names,
-    normalize_last_name,
     promote_or_repeat_students,
     renumber_class_alphabetically,
     toggle_enrollment_active_state,
-    validate_student_birth_date,
+    update_student_and_enrollment,
 )
 
 students_bp = Blueprint("students", __name__)
@@ -66,9 +65,15 @@ def students_list():
         and selected_class is not None
         and not selected_class.school_year.is_closed
     )
+    can_edit_students = user_can_edit_class_students(current_user, selected_class)
 
     if request.method == "POST":
         if not can_edit or selected_class is None:
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Création d'élève refusée sur {request.path} pour {current_user.username} ({current_user.role})",
+                commit=True,
+            )
             abort(403)
 
         last_name = request.form.get("last_name") or ""
@@ -160,6 +165,7 @@ def students_list():
         status_filter=status_filter,
         sort_by=sort_by,
         can_edit=can_edit,
+        can_edit_students=can_edit_students,
     )
 
 
@@ -169,51 +175,83 @@ def student_detail(enrollment_id: int):
     enrollment = db.get_or_404(ClassEnrollment, enrollment_id)
     ac = enrollment.academic_class
     if not user_can_view_class(current_user, ac.id):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Accès refusé à la fiche élève {enrollment_id} ({ac.name}) pour {current_user.username}",
+            commit=True,
+        )
         abort(403)
 
-    can_edit = (current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)) and not ac.school_year.is_closed
+    can_edit = user_can_edit_class_students(current_user, ac)
+    can_toggle_status = (
+        current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR) and not ac.school_year.is_closed
+    )
     student = enrollment.student
+
+    # Navigation rapide précédent / suivant dans la classe
+    ordered_class_ids = [
+        row_id
+        for (row_id,) in db.session.query(ClassEnrollment.id)
+        .join(Student)
+        .filter(ClassEnrollment.class_id == ac.id, ClassEnrollment.is_active.is_(True))
+        .order_by(ClassEnrollment.roll_number, Student.last_name, ClassEnrollment.id)
+        .all()
+    ]
+    prev_enrollment_id = None
+    next_enrollment_id = None
+    if enrollment.id in ordered_class_ids:
+        idx = ordered_class_ids.index(enrollment.id)
+        if idx > 0:
+            prev_enrollment_id = ordered_class_ids[idx - 1]
+        if idx + 1 < len(ordered_class_ids):
+            next_enrollment_id = ordered_class_ids[idx + 1]
 
     if request.method == "POST":
         if not can_edit:
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Modification refusée sur la fiche élève {enrollment_id} ({ac.name}) pour {current_user.username}",
+                commit=True,
+            )
             abort(403)
 
-        last_name = normalize_last_name(request.form.get("last_name") or "")
-        first_names = normalize_first_names(request.form.get("first_names") or "")
-        sex = (request.form.get("sex") or "").strip().upper()
         birth_str = (request.form.get("birth_date") or "").strip()
-        roll_number = request.form.get("roll_number", type=int) or enrollment.roll_number
-
-        if not last_name or not first_names or sex not in ("M", "F"):
-            flash("Nom, prénoms et sexe (M/F) sont obligatoires.", "danger")
+        try:
+            bdate = datetime.strptime(birth_str, "%Y-%m-%d").date()
+        except ValueError:
+            flash("Veuillez saisir une date de naissance valide.", "danger")
             return redirect(url_for("students.student_detail", enrollment_id=enrollment.id))
 
         try:
-            bdate = datetime.strptime(birth_str, "%Y-%m-%d").date()
-            validate_student_birth_date(bdate, ac.school_year.age_reference_date)
-        except (ValueError, StudentValidationError) as exc:
+            changes = update_student_and_enrollment(
+                enrollment=enrollment,
+                last_name=request.form.get("last_name") or "",
+                first_names=request.form.get("first_names") or "",
+                sex=request.form.get("sex") or "",
+                birth_date=bdate,
+                roll_number=request.form.get("roll_number", type=int),
+                unique_code=request.form.get("unique_code"),
+                schooling_status=request.form.get("schooling_status"),
+                repeated_class_detail=request.form.get("repeated_class_detail"),
+                observations=request.form.get("observations"),
+                commit=False,
+            )
+        except StudentValidationError as exc:
+            db.session.rollback()
             flash(str(exc), "danger")
             return redirect(url_for("students.student_detail", enrollment_id=enrollment.id))
 
-        student.last_name = last_name
-        student.first_names = first_names
-        student.sex = sex
-        student.birth_date = bdate
-
-        if roll_number > 0:
-            enrollment.roll_number = roll_number
-        enrollment.schooling_status = (request.form.get("schooling_status") or "").strip()[:120] or None
-        enrollment.repeated_class_detail = (request.form.get("repeated_class_detail") or "").strip()[:150] or None
-        enrollment.observations = (request.form.get("observations") or "").strip() or None
-
         record_audit_log(
             "STUDENT_UPDATE",
-            f"Modification de la fiche de l'élève {student.full_name} ({ac.name})",
+            f"Modification de l'identité/fiche de l'élève {student.full_name} ({ac.name})",
             target_type="ClassEnrollment",
             target_id=enrollment.id,
+            details={"changes": changes} if changes else None,
             commit=True,
         )
-        flash("Fiche élève mise à jour.", "success")
+        flash("Identité et informations de l'élève mises à jour.", "success")
+        if request.form.get("action") == "save_and_next" and next_enrollment_id:
+            return redirect(url_for("students.student_detail", enrollment_id=next_enrollment_id))
         return redirect(url_for("students.student_detail", enrollment_id=enrollment.id))
 
     history_enrollments = (
@@ -230,6 +268,93 @@ def student_detail(enrollment_id: int):
         academic_class=ac,
         history_enrollments=history_enrollments,
         can_edit=can_edit,
+        can_toggle_status=can_toggle_status,
+        prev_enrollment_id=prev_enrollment_id,
+        next_enrollment_id=next_enrollment_id,
+    )
+
+
+@students_bp.route("/eleves/modifier-liste/<int:class_id>", methods=["GET", "POST"])
+@login_required
+def students_bulk_edit(class_id: int):
+    """Tableau d'édition groupée des identités et informations des élèves d'une classe."""
+    ac = db.get_or_404(AcademicClass, class_id)
+    if not user_can_edit_class_students(current_user, ac):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Édition groupée des élèves refusée sur {ac.name} pour {current_user.username} ({current_user.role})",
+            commit=True,
+        )
+        abort(403)
+
+    include_inactive = request.args.get("inactive", "0") == "1" or request.form.get("inactive") == "1"
+    query = ClassEnrollment.query.join(Student).filter(ClassEnrollment.class_id == ac.id)
+    if not include_inactive:
+        query = query.filter(ClassEnrollment.is_active.is_(True))
+    enrollments = query.order_by(ClassEnrollment.roll_number, Student.last_name, Student.first_names).all()
+
+    if request.method == "POST":
+        updated_count = 0
+        detailed_changes: dict[str, dict] = {}
+        try:
+            for enr in enrollments:
+                prefix = f"enr_{enr.id}_"
+                if f"{prefix}last_name" not in request.form:
+                    continue
+                birth_str = (request.form.get(f"{prefix}birth_date") or "").strip()
+                try:
+                    bdate = datetime.strptime(birth_str, "%Y-%m-%d").date()
+                except ValueError as exc:
+                    raise StudentValidationError(
+                        f"N° {enr.roll_number} ({enr.student.full_name}) : date de naissance invalide."
+                    ) from exc
+
+                changes = update_student_and_enrollment(
+                    enrollment=enr,
+                    last_name=request.form.get(f"{prefix}last_name") or "",
+                    first_names=request.form.get(f"{prefix}first_names") or "",
+                    sex=request.form.get(f"{prefix}sex") or "",
+                    birth_date=bdate,
+                    roll_number=request.form.get(f"{prefix}roll_number", type=int),
+                    unique_code=request.form.get(f"{prefix}unique_code"),
+                    schooling_status=request.form.get(f"{prefix}schooling_status"),
+                    repeated_class_detail=request.form.get(f"{prefix}repeated_class_detail"),
+                    observations=request.form.get(f"{prefix}observations"),
+                    commit=False,
+                )
+                if changes:
+                    updated_count += 1
+                    detailed_changes[str(enr.id)] = {
+                        "student": enr.student.full_name,
+                        "changes": changes,
+                    }
+
+            if updated_count > 0:
+                record_audit_log(
+                    "STUDENT_BULK_UPDATE",
+                    f"Mise à jour groupée de {updated_count} élève(s) dans {ac.name} ({ac.school_year.label})",
+                    target_type="AcademicClass",
+                    target_id=ac.id,
+                    details=detailed_changes,
+                    commit=True,
+                )
+                flash(
+                    f"Les identités et informations de {updated_count} élève(s) ont été mises à jour avec succès.",
+                    "success",
+                )
+            else:
+                db.session.commit()
+                flash("Aucune modification détectée dans la liste.", "info")
+            return redirect(url_for("students.students_list", class_id=ac.id))
+        except StudentValidationError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+
+    return render_template(
+        "students/bulk_edit.html",
+        academic_class=ac,
+        enrollments=enrollments,
+        include_inactive=include_inactive,
     )
 
 
@@ -259,12 +384,16 @@ def toggle_student_status(enrollment_id: int):
 
 
 @students_bp.route("/eleves/renumeroter/<int:class_id>", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@login_required
 def renumber_class(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
-    if ac.school_year.is_closed:
-        flash("Impossible de renuméroter une classe d'une année clôturée.", "danger")
-        return redirect(url_for("students.students_list", class_id=ac.id))
+    if not user_can_edit_class_students(current_user, ac):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Renumérotation refusée sur {ac.name} pour {current_user.username} ({current_user.role})",
+            commit=True,
+        )
+        abort(403)
 
     count = renumber_class_alphabetically(ac, commit=False)
     record_audit_log(
