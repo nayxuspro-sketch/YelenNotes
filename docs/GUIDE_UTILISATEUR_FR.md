@@ -73,5 +73,6 @@ Dans le menu **Saisie des notes** :
 3. Le Directeur ou l'Administrateur peut alors clôturer la période dans **Années & Périodes** (`Statut → CLÔTURÉE`) afin de verrouiller les notes.
 4. Imprimez ou téléchargez vos documents officiels au format **PDF A4** (ou **Excel `.xlsx`**) :
    - **Relevés de notes** : vue complète par classe et période avec moyennes par matière et signatures.
-   - **Classement de mérite** : par ordre décroissant de moyenne (périodique ou annuel), avec gestion des ex æquo.
+   - **Classement de mérite** : par ordre décroissant de moyenne (périodique ou annuel), avec renumérotation séquentielle `1..N` et gestion des ex æquo.
+   - **Tableau synoptique** : fiche statistique par période d'évaluation et par discipline (ventilation **Garçons / Filles / Total**, effectif ayant composé, ayant obtenu ou non la moyenne, taux de réussite et d'échec à 2 décimales ou `N/A`, synthèse générale de la classe, orientation PDF Paysage ou Portrait).
    - **Bulletins scolaires PDF** : aperçu à l'écran avant impression, génération pour **un élève**, **une sélection d'élèves cochés** ou **toute la classe** dans un seul fichier PDF multi-pages prêt à imprimer en noir et blanc ou en couleur.

@@ -121,6 +121,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'reports.synoptic_report' %}active{% endif %}" href="{{ url_for('reports.synoptic_report') }}">
+                        Tableau synoptique
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'reports.bulletins_center' %}active{% endif %}" href="{{ url_for('reports.bulletins_center') }}">
                         Bulletins scolaires PDF
                     </a>
