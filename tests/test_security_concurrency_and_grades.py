@@ -595,3 +595,243 @@ def test_teacher_can_add_and_update_subjects_and_scales_for_assigned_class_only(
     )
 
 
+def test_period_modification_by_titulaire_directeur_and_super_admin(app, configured_school):
+    """Dans le tableau « Périodes de l'année 2026-2027 », autoriser le titulaire de la classe,
+    le directeur et le super admin à modifier les périodes créées, et bloquer les profils non autorisés."""
+    from yelen_notes.models import (
+        ROLE_ENSEIGNANT,
+        ROLE_SECRETAIRE,
+        STATUS_OUVERTE,
+        TeacherClassAssignment,
+    )
+
+    with app.app_context():
+        year_id = configured_school["year_id"]
+        t1_id = configured_school["t1_id"]
+        t2_id = configured_school["t2_id"]
+
+        # Créer un enseignant sans classe en 2026-2027 (uniquement affecté à une autre année 2025-2026)
+        other_year = SchoolYear(
+            label="2025-2026",
+            start_date=date(2025, 10, 1),
+            end_date=date(2026, 6, 30),
+            age_reference_date=date(2025, 10, 1),
+            status=STATUS_OUVERTE,
+        )
+        db.session.add(other_year)
+        db.session.flush()
+        other_class = AcademicClass(
+            school_year_id=other_year.id,
+            name="CP1-2025",
+            level_label="CP1",
+            director_name="M. OUÉDRAOGO Issiaka",
+            director_title="Le Directeur",
+            titulaire_name="M. ZONGO",
+            display_order=1,
+            is_active=True,
+        )
+        db.session.add(other_class)
+        db.session.flush()
+
+        other_teacher = User(
+            username="titulaire_2025",
+            full_name="Enseignant Autre Année",
+            role=ROLE_ENSEIGNANT,
+            is_active=True,
+        )
+        other_teacher.set_password("AutreAnnee2026!")
+        secretaire = User(
+            username="sec_periodes",
+            full_name="Secrétaire Test",
+            role=ROLE_SECRETAIRE,
+            is_active=True,
+        )
+        secretaire.set_password("SecPass2026!")
+        db.session.add_all([other_teacher, secretaire])
+        db.session.flush()
+        db.session.add(
+            TeacherClassAssignment(
+                user_id=other_teacher.id, class_id=other_class.id, can_edit_grades=True
+            )
+        )
+        db.session.commit()
+
+    # 1. SUPER ADMIN : voit le modal de modification dans « Périodes de l'année 2026-2027 » et modifie T1
+    admin_c = app.test_client()
+    _login_client(admin_c, "admin", "AdminPass2026!")
+    p_admin = admin_c.get(f"/periodes?year_id={year_id}")
+    assert p_admin.status_code == 200
+    html_admin = p_admin.data.decode("utf-8")
+    assert "Périodes de l&#39;année 2026-2027" in html_admin or "Périodes de l'année 2026-2027" in html_admin
+    assert f'id="editPeriodModal-{t1_id}"' in html_admin
+    tok_admin = extract_csrf_token(p_admin.data)
+
+    r_admin = admin_c.post(
+        f"/periodes/{t1_id}/modifier",
+        data={
+            "csrf_token": tok_admin,
+            "name": "Premier Trimestre (SA)",
+            "short_code": "TRIM1",
+            "display_order": "1",
+            "annual_weight": "1,5",
+            "start_date": "2026-10-01",
+            "end_date": "2026-12-20",
+        },
+        follow_redirects=True,
+    )
+    assert r_admin.status_code == 200
+    with app.app_context():
+        p1 = db.session.get(EvaluationPeriod, t1_id)
+        assert p1.name == "Premier Trimestre (SA)"
+        assert p1.short_code == "TRIM1"
+        assert float(p1.annual_weight) == 1.5
+        assert p1.start_date == date(2026, 10, 1)
+        assert p1.end_date == date(2026, 12, 20)
+
+    # 2. DIRECTEUR : voit le bouton Modifier et met à jour une période créée
+    dir_c = app.test_client()
+    _login_client(dir_c, "directeur", "Directeur2026!")
+    p_dir = dir_c.get(f"/periodes?year_id={year_id}")
+    assert p_dir.status_code == 200
+    assert f'id="editPeriodModal-{t2_id}"' in p_dir.data.decode("utf-8")
+    tok_dir = extract_csrf_token(p_dir.data)
+
+    r_dir = dir_c.post(
+        f"/periodes/{t2_id}/modifier",
+        data={
+            "csrf_token": tok_dir,
+            "name": "Deuxième Trimestre (Dir)",
+            "short_code": "TRIM2",
+            "display_order": "2",
+            "annual_weight": "2",
+            "start_date": "2027-01-05",
+            "end_date": "2027-03-28",
+        },
+        follow_redirects=True,
+    )
+    assert r_dir.status_code == 200
+    with app.app_context():
+        p2 = db.session.get(EvaluationPeriod, t2_id)
+        assert p2.name == "Deuxième Trimestre (Dir)"
+        assert p2.short_code == "TRIM2"
+        assert float(p2.annual_weight) == 2.0
+
+    # 3. TITULAIRE DE LA CLASSE (2026-2027) : voit le bouton Modifier sur 2026-2027 et modifie la période créée
+    tit_c = app.test_client()
+    _login_client(tit_c, "titulaire_cm2", "Titulaire2026!")
+    p_tit = tit_c.get(f"/periodes?year_id={year_id}")
+    assert p_tit.status_code == 200
+    html_tit = p_tit.data.decode("utf-8")
+    assert f'id="editPeriodModal-{t1_id}"' in html_tit
+    # Le titulaire ne crée pas de nouvelles périodes et ne clôture pas les périodes (séparation des pouvoirs)
+    assert "Ajouter une période" not in html_tit
+    tok_tit = extract_csrf_token(p_tit.data)
+
+    r_tit = tit_c.post(
+        f"/periodes/{t1_id}/modifier",
+        data={
+            "csrf_token": tok_tit,
+            "name": "1er Trimestre 2026-2027",
+            "short_code": "T1",
+            "display_order": "4",
+            "annual_weight": "1",
+            "start_date": "2026-10-05",
+            "end_date": "2026-12-18",
+        },
+        follow_redirects=True,
+    )
+    assert r_tit.status_code == 200
+    assert "1er Trimestre 2026-2027" in r_tit.data.decode("utf-8")
+    with app.app_context():
+        p1_after = db.session.get(EvaluationPeriod, t1_id)
+        assert p1_after.name == "1er Trimestre 2026-2027"
+        assert p1_after.short_code == "T1"
+        assert p1_after.display_order == 4
+        assert p1_after.start_date == date(2026, 10, 5)
+        assert (
+            AuditLog.query.filter_by(action="PERIOD_UPDATE", target_id=t1_id)
+            .order_by(AuditLog.id.desc())
+            .first()
+            is not None
+        )
+
+    # Validation métier : doublon de nom ou dates inversées rejetés proprement sans erreur 500
+    r_dup = tit_c.post(
+        f"/periodes/{t1_id}/modifier",
+        data={
+            "csrf_token": tok_tit,
+            "name": "Deuxième Trimestre (Dir)",
+            "short_code": "T1",
+            "display_order": "4",
+            "annual_weight": "1",
+        },
+        follow_redirects=True,
+    )
+    assert r_dup.status_code == 200
+    assert "existe déjà" in r_dup.data.decode("utf-8")
+
+    r_bad_dates = tit_c.post(
+        f"/periodes/{t1_id}/modifier",
+        data={
+            "csrf_token": tok_tit,
+            "name": "1er Trimestre 2026-2027",
+            "short_code": "T1",
+            "display_order": "4",
+            "annual_weight": "1",
+            "start_date": "2026-12-25",
+            "end_date": "2026-10-01",
+        },
+        follow_redirects=True,
+    )
+    assert r_bad_dates.status_code == 200
+    assert "postérieure" in r_bad_dates.data.decode("utf-8")
+
+    # Le titulaire ne peut ni créer de période ni verrouiller/déverrouiller le statut
+    assert (
+        tit_c.post(
+            "/periodes",
+            data={"csrf_token": tok_tit, "year_id": str(year_id), "name": "T4", "short_code": "T4"},
+        ).status_code
+        == 403
+    )
+    assert (
+        tit_c.post(
+            f"/periodes/{t1_id}/statut",
+            data={"csrf_token": tok_tit, "status": "CLOTUREE"},
+        ).status_code
+        == 403
+    )
+
+    # 4. ISOLATION : un enseignant non titulaire en 2026-2027 reçoit 403 et ne voit pas le modal sur 2026-2027
+    other_c = app.test_client()
+    _login_client(other_c, "titulaire_2025", "AutreAnnee2026!")
+    p_other = other_c.get(f"/periodes?year_id={year_id}")
+    assert p_other.status_code == 200
+    assert f'id="editPeriodModal-{t1_id}"' not in p_other.data.decode("utf-8")
+    tok_other = extract_csrf_token(p_other.data)
+    assert (
+        other_c.post(
+            f"/periodes/{t1_id}/modifier",
+            data={"csrf_token": tok_other, "name": "Piratage", "short_code": "PIR", "annual_weight": "1"},
+        ).status_code
+        == 403
+    )
+
+    # 5. SECRÉTAIRE & CONSULTATION : refusés en 403
+    for uname, pwd in [("sec_periodes", "SecPass2026!"), ("lecteur", "Lecteur2026!")]:
+        unauth_c = app.test_client()
+        _login_client(unauth_c, uname, pwd)
+        p_unauth = unauth_c.get(f"/periodes?year_id={year_id}")
+        assert p_unauth.status_code == 200
+        assert f'id="editPeriodModal-{t1_id}"' not in p_unauth.data.decode("utf-8")
+        tok_u = extract_csrf_token(p_unauth.data)
+        assert (
+            unauth_c.post(
+                f"/periodes/{t1_id}/modifier",
+                data={"csrf_token": tok_u, "name": "Interdit", "short_code": "INT", "annual_weight": "1"},
+            ).status_code
+            == 403
+        )
+
+
+

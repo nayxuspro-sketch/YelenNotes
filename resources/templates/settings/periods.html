@@ -28,7 +28,7 @@
 </div>
 {% else %}
 <div class="row g-4">
-    {% if can_edit and not selected_year.is_closed %}
+    {% if can_create_period %}
     <div class="col-lg-4">
         <div class="card">
             <div class="card-header d-flex align-items-center gap-2">
@@ -86,15 +86,17 @@
     </div>
     {% endif %}
 
-    <div class="col-lg-{% if can_edit and not selected_year.is_closed %}8{% else %}12{% endif %}">
+    <div class="col-lg-{% if can_create_period %}8{% else %}12{% endif %}">
         <div class="card">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <span class="d-flex align-items-center gap-2">
                     {{ icon('clock', 17) }} Périodes de l'année {{ selected_year.label }}
                 </span>
+                {% if can_perm('subjects.view') %}
                 <a href="{{ url_for('academics.policies_and_scales', year_id=selected_year.id) }}" class="btn btn-sm btn-outline-secondary">
                     Barème & appréciations {{ icon('chevron-right', 14) }}
                 </a>
+                {% endif %}
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -106,7 +108,7 @@
                             <th class="text-center">Poids</th>
                             <th>Dates</th>
                             <th>Statut</th>
-                            <th class="text-end">Verrouillage</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -133,24 +135,41 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                {% if can_edit and not selected_year.is_closed %}
-                                <div class="d-inline-flex gap-1">
-                                    {% if p.status != 'OUVERTE' %}
-                                    <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="status" value="OUVERTE">
-                                        <button type="submit" class="btn btn-sm btn-outline-success">Ouvrir</button>
-                                    </form>
+                                {% if selected_year.is_closed %}
+                                <span class="small text-muted d-inline-flex align-items-center gap-1">
+                                    {{ icon('lock', 13) }} Verrouillé
+                                </span>
+                                {% elif can_modify_periods or can_validate_periods %}
+                                <div class="d-inline-flex flex-wrap justify-content-end gap-1">
+                                    {% if can_modify_periods %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#editPeriodModal-{{ p.id }}"
+                                            title="Modifier « {{ p.name }} »">
+                                        {{ icon('pen-line', 14) }} Modifier
+                                    </button>
                                     {% endif %}
-                                    {% if p.status != 'CLOTUREE' %}
-                                    <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0"
-                                          onsubmit="return confirm('Clôturer « {{ p.name }} » ? Les notes ne pourront plus être modifiées.');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="status" value="CLOTUREE">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">Clôturer</button>
-                                    </form>
+                                    {% if can_validate_periods %}
+                                        {% if p.status != 'OUVERTE' %}
+                                        <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="status" value="OUVERTE">
+                                            <button type="submit" class="btn btn-sm btn-outline-success">Ouvrir</button>
+                                        </form>
+                                        {% endif %}
+                                        {% if p.status != 'CLOTUREE' %}
+                                        <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0"
+                                              onsubmit="return confirm('Clôturer « {{ p.name }} » ? Les notes ne pourront plus être modifiées.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="status" value="CLOTUREE">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Clôturer</button>
+                                        </form>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
+                                {% else %}
+                                <span class="text-muted small">—</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -167,5 +186,93 @@
         </div>
     </div>
 </div>
+
+{% if can_modify_periods and periods %}
+{% for p in periods %}
+<div class="modal fade" id="editPeriodModal-{{ p.id }}" tabindex="-1" aria-labelledby="editPeriodModalLabel-{{ p.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{{ url_for('settings.update_period', period_id=p.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-semibold d-flex align-items-center gap-2" id="editPeriodModalLabel-{{ p.id }}">
+                        {{ icon('pen-line', 17) }}
+                        <span>Modifier la période ({{ selected_year.label }})</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="edit_name_{{ p.id }}">Intitulé complet <span class="text-danger">*</span></label>
+                        <input type="text"
+                               id="edit_name_{{ p.id }}"
+                               name="name"
+                               class="form-control"
+                               maxlength="100"
+                               required
+                               value="{{ p.name }}">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label" for="edit_short_code_{{ p.id }}">Code court <span class="text-danger">*</span></label>
+                            <input type="text"
+                                   id="edit_short_code_{{ p.id }}"
+                                   name="short_code"
+                                   class="form-control"
+                                   maxlength="20"
+                                   required
+                                   value="{{ p.short_code }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label" for="edit_display_order_{{ p.id }}">Ordre <span class="text-danger">*</span></label>
+                            <input type="number"
+                                   id="edit_display_order_{{ p.id }}"
+                                   name="display_order"
+                                   class="form-control yn-tabular"
+                                   min="1"
+                                   required
+                                   value="{{ p.display_order }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label" for="edit_annual_weight_{{ p.id }}">Poids annuel <span class="text-danger">*</span></label>
+                            <input type="text"
+                                   id="edit_annual_weight_{{ p.id }}"
+                                   name="annual_weight"
+                                   class="form-control yn-tabular"
+                                   required
+                                   value="{{ p.annual_weight | compact_fr }}">
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label" for="edit_start_date_{{ p.id }}">Date de début (facultatif)</label>
+                            <input type="date"
+                                   id="edit_start_date_{{ p.id }}"
+                                   name="start_date"
+                                   class="form-control yn-tabular"
+                                   value="{{ p.start_date.isoformat() if p.start_date else '' }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="edit_end_date_{{ p.id }}">Date de fin (facultatif)</label>
+                            <input type="date"
+                                   id="edit_end_date_{{ p.id }}"
+                                   name="end_date"
+                                   class="form-control yn-tabular"
+                                   value="{{ p.end_date.isoformat() if p.end_date else '' }}">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        {{ icon('check', 15) }} Enregistrer les modifications
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
 {% endif %}
 {% endblock %}

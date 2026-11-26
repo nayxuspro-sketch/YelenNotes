@@ -40,9 +40,11 @@ from yelen_notes.security import (
     get_accessible_years_query,
     get_current_establishment_id,
     has_permission,
+    is_strictly_scoped_teacher,
     permission_required,
     record_audit_log,
     user_can_access_establishment,
+    user_can_modify_year_periods,
 )
 
 settings_bp = Blueprint("settings", __name__)
@@ -346,8 +348,12 @@ def periods():
     selected_year = db.session.get(SchoolYear, year_id) if year_id else get_selected_school_year()
     if selected_year and not user_can_access_establishment(current_user, selected_year.establishment_id):
         abort(403)
-    can_edit = has_permission(current_user, "evaluations.create") or has_permission(
-        current_user, "evaluations.update"
+    can_create_period = bool(
+        selected_year and not selected_year.is_closed and has_permission(current_user, "evaluations.create")
+    )
+    can_modify_periods = user_can_modify_year_periods(current_user, selected_year)
+    can_validate_periods = bool(
+        selected_year and not selected_year.is_closed and has_permission(current_user, "evaluations.validate")
     )
 
     if request.method == "POST":
@@ -377,6 +383,9 @@ def periods():
             return redirect(url_for("settings.periods", year_id=selected_year.id))
         if weight <= 0:
             flash("Le poids annuel de la période doit être strictement positif.", "danger")
+            return redirect(url_for("settings.periods", year_id=selected_year.id))
+        if start_d and end_d and start_d > end_d:
+            flash("La date de début ne peut pas être postérieure à la date de fin.", "danger")
             return redirect(url_for("settings.periods", year_id=selected_year.id))
 
         if not display_order or display_order <= 0:
@@ -430,7 +439,10 @@ def periods():
         all_years=all_years,
         selected_year=selected_year,
         periods=periods_list,
-        can_edit=can_edit,
+        can_edit=can_create_period,
+        can_create_period=can_create_period,
+        can_modify_periods=can_modify_periods,
+        can_validate_periods=can_validate_periods,
     )
 
 
@@ -469,40 +481,107 @@ def change_period_status(period_id: int):
 
 
 @settings_bp.route("/periodes/<int:period_id>/modifier", methods=["POST"])
-@permission_required("evaluations.update", module="evaluations")
+@any_permission_required("evaluations.update", "periods.update", module="evaluations")
 def update_period(period_id: int):
     period = db.get_or_404(EvaluationPeriod, period_id)
-    if not user_can_access_establishment(current_user, period.school_year.establishment_id):
+    school_year = period.school_year
+    if not user_can_access_establishment(current_user, school_year.establishment_id):
         abort(403)
-    if period.school_year.is_closed:
+    if school_year.is_closed:
+        if is_strictly_scoped_teacher(current_user):
+            # Si l'enseignant n'est même pas titulaire d'une classe de cette année, refuser 403
+            from yelen_notes.models import AcademicClass, TeacherClassAssignment
+
+            has_year_class = (
+                TeacherClassAssignment.query.join(
+                    AcademicClass, TeacherClassAssignment.class_id == AcademicClass.id
+                )
+                .filter(
+                    TeacherClassAssignment.user_id == current_user.id,
+                    TeacherClassAssignment.can_edit_grades.is_(True),
+                    AcademicClass.school_year_id == school_year.id,
+                )
+                .first()
+                is not None
+            )
+            if not has_year_class:
+                abort(403)
         flash("Impossible de modifier une période d'une année clôturée.", "danger")
-        return redirect(url_for("settings.periods", year_id=period.school_year_id))
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+
+    if not user_can_modify_year_periods(current_user, school_year):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Tentative non autorisée de modification de la période '{period.name}' ({school_year.label}) par {current_user.username}",
+            module="evaluations",
+            target_type="EvaluationPeriod",
+            target_id=period.id,
+            status="REFUSED",
+            commit=True,
+        )
+        abort(403)
 
     name = (request.form.get("name") or "").strip()
     short_code = (request.form.get("short_code") or "").strip()
+    raw_order = (request.form.get("display_order") or "").strip()
+
     try:
-        weight = Decimal((request.form.get("annual_weight") or "1").replace(",", "."))
+        display_order = int(raw_order) if raw_order else period.display_order
+        weight = Decimal(
+            (request.form.get("annual_weight") or str(period.annual_weight)).replace(",", ".")
+        )
         start_d = _parse_optional_date(request.form.get("start_date"))
         end_d = _parse_optional_date(request.form.get("end_date"))
     except (InvalidOperation, ValueError):
-        flash("Valeurs de poids ou de dates invalides.", "danger")
-        return redirect(url_for("settings.periods", year_id=period.school_year_id))
+        flash("Valeurs d'ordre, de poids annuel ou de dates invalides.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
 
-    if name:
-        period.name = name
-    if short_code:
-        period.short_code = short_code[:20]
-    if weight > 0:
-        period.annual_weight = weight
+    if not name or not short_code:
+        flash("L'intitulé et le code court de la période sont obligatoires.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+    if display_order <= 0:
+        flash("L'ordre d'affichage doit être un entier strictement positif.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+    if weight <= 0:
+        flash("Le poids annuel de la période doit être strictement positif.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+    if start_d and end_d and start_d > end_d:
+        flash("La date de début ne peut pas être postérieure à la date de fin.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+
+    duplicate_name = EvaluationPeriod.query.filter(
+        EvaluationPeriod.school_year_id == school_year.id,
+        EvaluationPeriod.name == name,
+        EvaluationPeriod.id != period.id,
+    ).first()
+    if duplicate_name is not None:
+        flash(f"Une autre période nommée « {name} » existe déjà pour l'année {school_year.label}.", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+
+    duplicate_order = EvaluationPeriod.query.filter(
+        EvaluationPeriod.school_year_id == school_year.id,
+        EvaluationPeriod.display_order == display_order,
+        EvaluationPeriod.id != period.id,
+    ).first()
+    if duplicate_order is not None:
+        flash(f"L'ordre d'affichage {display_order} est déjà utilisé par « {duplicate_order.name} ».", "danger")
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+
+    old_summary = f"{period.name} [{period.short_code}] (ordre={period.display_order}, poids={period.annual_weight})"
+    period.name = name
+    period.short_code = short_code[:20]
+    period.display_order = display_order
+    period.annual_weight = weight
     period.start_date = start_d
     period.end_date = end_d
 
     record_audit_log(
         "PERIOD_UPDATE",
-        f"Mise à jour de la période '{period.name}'",
+        f"Modification de la période ({school_year.label}) : {old_summary} -> {period.name} [{period.short_code}] (ordre={period.display_order}, poids={period.annual_weight})",
+        module="evaluations",
         target_type="EvaluationPeriod",
         target_id=period.id,
         commit=True,
     )
     flash(f"Période « {period.name} » mise à jour.", "success")
-    return redirect(url_for("settings.periods", year_id=period.school_year_id))
+    return redirect(url_for("settings.periods", year_id=school_year.id))
