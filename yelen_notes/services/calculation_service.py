@@ -1040,3 +1040,201 @@ def compute_annual_class_results(
         pass_count=p_count,
         pass_rate_percent=p_rate,
     )
+
+
+@dataclass
+class SynopticBreakdown:
+    """Indicateurs statistiques élémentaires (Garçons, Filles ou Total) d'un tableau synoptique."""
+
+    composed: int
+    passed: int
+    failed: int
+    pass_rate: Decimal | None
+    fail_rate: Decimal | None
+    display_pass_rate: str
+    display_fail_rate: str
+
+
+@dataclass
+class SynopticSubjectRow:
+    """Bloc synoptique d'une discipline avec ventilation Garçons / Filles / Total."""
+
+    subject: Subject
+    pass_threshold_raw: Decimal
+    boys: SynopticBreakdown
+    girls: SynopticBreakdown
+    total: SynopticBreakdown
+    missing_count: int
+    absent_count: int
+    dispensed_count: int
+
+
+@dataclass
+class SynopticPeriodReport:
+    """Fiche de synthèse statistique (Tableau synoptique) d'une classe pour une période d'évaluation."""
+
+    academic_class: AcademicClass
+    period: EvaluationPeriod
+    period_results: PeriodClassResults
+    all_subjects: list[Subject]
+    selected_subject_id: int | None
+    subject_rows: list[SynopticSubjectRow]
+    enrolled_boys: int
+    enrolled_girls: int
+    enrolled_total: int
+    overall_boys: SynopticBreakdown
+    overall_girls: SynopticBreakdown
+    overall_total: SynopticBreakdown
+    pass_threshold_general: Decimal
+
+
+def _build_synoptic_breakdown(
+    scores: list[Decimal],
+    pass_threshold: Decimal,
+    rounding_mode: str,
+) -> SynopticBreakdown:
+    """Calcule les 5 indicateurs synoptiques exacts avec 2 décimales et gestion de la division par zéro (N/A)."""
+    composed = len(scores)
+    passed = sum(1 for sc in scores if sc >= pass_threshold)
+    failed = composed - passed
+    if composed == 0:
+        return SynopticBreakdown(
+            composed=0,
+            passed=0,
+            failed=0,
+            pass_rate=None,
+            fail_rate=None,
+            display_pass_rate="N/A",
+            display_fail_rate="N/A",
+        )
+
+    denom = Decimal(composed)
+    pass_rate = quantize_value((Decimal(passed) * Decimal("100")) / denom, 2, rounding_mode)
+    fail_rate = quantize_value((Decimal(failed) * Decimal("100")) / denom, 2, rounding_mode)
+    return SynopticBreakdown(
+        composed=composed,
+        passed=passed,
+        failed=failed,
+        pass_rate=pass_rate,
+        fail_rate=fail_rate,
+        display_pass_rate=f"{format_decimal_fr(pass_rate, 2, rounding_mode)} %",
+        display_fail_rate=f"{format_decimal_fr(fail_rate, 2, rounding_mode)} %",
+    )
+
+
+def compute_synoptic_period_report(
+    academic_class: AcademicClass,
+    period: EvaluationPeriod,
+    *,
+    subject_id: int | None = None,
+    period_results: PeriodClassResults | None = None,
+) -> SynopticPeriodReport:
+    """Génère dynamiquement le Tableau Synoptique des résultats par période d'évaluation.
+
+    Réutilise strictement les modèles, règles d'absence, d'arrondi et de validation déjà configurés :
+    - Les élèves actifs sont pris en compte sans doublons (contrainte unique d'inscription).
+    - Les élèves sans note (NON_SAISIE) ou dispensés (DISPENSE) ne sont jamais comptés comme échec
+      et n'entrent pas dans l'effectif ayant composé.
+    - Les absences (ABSENT) suivent la politique configurée (ZERO -> note 0 comptée dans ayant composé ;
+      NEUTRALIZE / UNRANKED -> non comptée dans ayant composé).
+    - Si aucun élève n'a composé (composed == 0), les taux affichent « N/A ».
+    - Les taux de réussite et d'échec sont exprimés en pourcentage à 2 décimales.
+    """
+    results = period_results or compute_period_class_results(academic_class, period)
+    policy = results.policy
+    absence_policy = policy.absence_policy if policy else ABSENCE_ZERO
+    rounding_mode = results.rounding_mode
+    pass_threshold_gen = results.general_scale / Decimal("2")
+
+    all_subjects = list(results.subjects)
+    valid_subject_id = (
+        subject_id if (subject_id is not None and any(s.id == subject_id for s in all_subjects)) else None
+    )
+    target_subjects = (
+        [s for s in all_subjects if s.id == valid_subject_id]
+        if valid_subject_id is not None
+        else all_subjects
+    )
+
+    subject_rows: list[SynopticSubjectRow] = []
+    for subj in target_subjects:
+        min_s = to_decimal(subj.min_score)
+        max_s = to_decimal(subj.max_score)
+        pass_threshold_raw = (min_s + max_s) / Decimal("2")
+
+        boys_scores: list[Decimal] = []
+        girls_scores: list[Decimal] = []
+        total_scores: list[Decimal] = []
+        missing_cnt = 0
+        absent_cnt = 0
+        dispensed_cnt = 0
+
+        for st_row in results.active_rows:
+            cell = st_row.subject_cells.get(subj.id)
+            if cell is None or cell.status == GRADE_NON_SAISIE:
+                missing_cnt += 1
+                continue
+
+            if cell.status == GRADE_DISPENSE:
+                dispensed_cnt += 1
+                continue
+
+            eff_score: Decimal | None = None
+            if cell.status == GRADE_NUMERIQUE and cell.on_general_scale is not None:
+                eff_score = cell.on_general_scale
+            elif cell.status == GRADE_ABSENT:
+                absent_cnt += 1
+                if absence_policy == ABSENCE_ZERO:
+                    eff_score = Decimal("0")
+
+            if eff_score is not None:
+                total_scores.append(eff_score)
+                if st_row.enrollment.student.sex == "M":
+                    boys_scores.append(eff_score)
+                elif st_row.enrollment.student.sex == "F":
+                    girls_scores.append(eff_score)
+
+        subject_rows.append(
+            SynopticSubjectRow(
+                subject=subj,
+                pass_threshold_raw=pass_threshold_raw,
+                boys=_build_synoptic_breakdown(boys_scores, pass_threshold_gen, rounding_mode),
+                girls=_build_synoptic_breakdown(girls_scores, pass_threshold_gen, rounding_mode),
+                total=_build_synoptic_breakdown(total_scores, pass_threshold_gen, rounding_mode),
+                missing_count=missing_cnt,
+                absent_count=absent_cnt,
+                dispensed_count=dispensed_cnt,
+            )
+        )
+
+    # Synthèse globale de la classe sur la moyenne générale périodique (élèves actifs évalués/classables)
+    overall_boys_scores = [
+        r.rounded_average
+        for r in results.ranked_rows
+        if r.rounded_average is not None and r.enrollment.student.sex == "M"
+    ]
+    overall_girls_scores = [
+        r.rounded_average
+        for r in results.ranked_rows
+        if r.rounded_average is not None and r.enrollment.student.sex == "F"
+    ]
+    overall_total_scores = [
+        r.rounded_average for r in results.ranked_rows if r.rounded_average is not None
+    ]
+
+    return SynopticPeriodReport(
+        academic_class=academic_class,
+        period=period,
+        period_results=results,
+        all_subjects=all_subjects,
+        selected_subject_id=valid_subject_id,
+        subject_rows=subject_rows,
+        enrolled_boys=results.boys_count,
+        enrolled_girls=results.girls_count,
+        enrolled_total=results.active_count,
+        overall_boys=_build_synoptic_breakdown(overall_boys_scores, pass_threshold_gen, rounding_mode),
+        overall_girls=_build_synoptic_breakdown(overall_girls_scores, pass_threshold_gen, rounding_mode),
+        overall_total=_build_synoptic_breakdown(overall_total_scores, pass_threshold_gen, rounding_mode),
+        pass_threshold_general=pass_threshold_gen,
+    )
+

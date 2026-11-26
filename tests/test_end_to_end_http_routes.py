@@ -188,6 +188,8 @@ def test_complete_school_workflow_over_http(app, client):
         "/",
         "/notes/historique?class_id=1&period_id=1",
         "/resultats/releve?class_id=1&period_id=1",
+        "/resultats/tableau-synoptique?class_id=1&period_id=1",
+        "/resultats/tableau-synoptique?class_id=1&period_id=1&subject_id=1",
         "/resultats/classement?class_id=1&period_id=1&scope=PERIODE",
         "/resultats/classement?class_id=1&scope=ANNUEL",
         "/resultats/bulletins?class_id=1&period_id=1&scope=PERIODE",
@@ -202,6 +204,8 @@ def test_complete_school_workflow_over_http(app, client):
 
     for pdf_url in [
         "/resultats/releve/pdf?class_id=1&period_id=1",
+        "/resultats/tableau-synoptique/pdf?class_id=1&period_id=1&orientation=landscape",
+        "/resultats/tableau-synoptique/pdf?class_id=1&period_id=1&orientation=portrait",
         "/resultats/classement/pdf?class_id=1&period_id=1&scope=PERIODE",
         "/resultats/classement/pdf?class_id=1&scope=ANNUEL",
         "/resultats/bulletins/pdf?class_id=1&period_id=1&scope=PERIODE",

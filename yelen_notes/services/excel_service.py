@@ -13,6 +13,7 @@ from yelen_notes.models import AcademicClass, ClassEnrollment, EstablishmentSett
 from yelen_notes.services.calculation_service import (
     AnnualClassResults,
     PeriodClassResults,
+    SynopticPeriodReport,
     format_compact_decimal_fr,
     format_decimal_fr,
 )
@@ -530,6 +531,89 @@ def export_annual_ranking_to_excel(
             c = ws.cell(row=r, column=c_idx)
             c.font = BODY_FONT
             c.border = CELL_BORDER
+
+    _auto_fit_columns(ws)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def export_synoptic_period_to_excel(
+    settings: EstablishmentSettings,
+    synoptic: SynopticPeriodReport,
+) -> bytes:
+    """Exporte le TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES au format Excel (.xlsx)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tableau synoptique"
+
+    ac = synoptic.academic_class
+    school_label = settings.school_name or "Établissement scolaire"
+    ws.append([f"{school_label} — Année scolaire : {ac.school_year.label}"])
+    ws.append(["TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES"])
+    ws.append(
+        [
+            f"Classe : {ac.name} — Période : {synoptic.period.name} — "
+            f"Effectif actif : {synoptic.enrolled_boys} G + {synoptic.enrolled_girls} F = {synoptic.enrolled_total}"
+        ]
+    )
+    ws.merge_cells("A1:E1")
+    ws.merge_cells("A2:E2")
+    ws.merge_cells("A3:E3")
+    ws["A1"].font = BOLD_FONT
+    ws["A2"].font = Font(name="Calibri", size=13, bold=True)
+    ws["A3"].font = BODY_FONT
+
+    headers = ["Discipline", "Indicateurs statistiques", "Garçons", "Filles", "Total"]
+    ws.append(headers)
+    hr = ws.max_row
+    for c_idx in range(1, 6):
+        c = ws.cell(row=hr, column=c_idx)
+        c.fill = HEADER_FILL
+        c.font = HEADER_FONT
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = CELL_BORDER
+
+    pass_fill = PatternFill(start_color="ECFDF5", end_color="ECFDF5", fill_type="solid")
+    fail_fill = PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid")
+    pass_font = Font(name="Calibri", size=10, bold=True, color="065F46")
+    fail_font = Font(name="Calibri", size=10, bold=True, color="991B1B")
+
+    def _write_block(disc_title: str, boys_b, girls_b, total_b) -> None:
+        start_r = ws.max_row + 1
+        rows_spec = [
+            ("Effectif ayant composé", boys_b.composed, girls_b.composed, total_b.composed, None, BODY_FONT),
+            ("Effectif ayant obtenu la moyenne", boys_b.passed, girls_b.passed, total_b.passed, None, BODY_FONT),
+            ("Effectif n'ayant pas obtenu la moyenne", boys_b.failed, girls_b.failed, total_b.failed, None, BODY_FONT),
+            ("Taux de réussite (%)", boys_b.display_pass_rate, girls_b.display_pass_rate, total_b.display_pass_rate, pass_fill, pass_font),
+            ("Taux d'échec (%)", boys_b.display_fail_rate, girls_b.display_fail_rate, total_b.display_fail_rate, fail_fill, fail_font),
+        ]
+        for idx_line, (ind_lbl, b_val, g_val, t_val, row_fill, row_font) in enumerate(rows_spec):
+            ws.append([disc_title if idx_line == 0 else "", ind_lbl, b_val, g_val, t_val])
+            curr_r = ws.max_row
+            for col_i in range(1, 6):
+                cell = ws.cell(row=curr_r, column=col_i)
+                cell.border = CELL_BORDER
+                cell.font = BOLD_FONT if col_i in (1, 5) and row_fill is None else row_font
+                if col_i >= 3:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+                if row_fill is not None and col_i >= 2:
+                    cell.fill = row_fill
+        ws.merge_cells(start_row=start_r, start_column=1, end_row=start_r + 4, end_column=1)
+        ws.cell(row=start_r, column=1).alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for s_row in synoptic.subject_rows:
+        subj = s_row.subject
+        lbl = f"{subj.name} (/{format_compact_decimal_fr(subj.max_score)})"
+        _write_block(lbl, s_row.boys, s_row.girls, s_row.total)
+
+    if synoptic.selected_subject_id is None and synoptic.subject_rows:
+        _write_block(
+            f"SYNTHÈSE GÉNÉRALE DE LA CLASSE (/{format_compact_decimal_fr(synoptic.period_results.general_scale)})",
+            synoptic.overall_boys,
+            synoptic.overall_girls,
+            synoptic.overall_total,
+        )
 
     _auto_fit_columns(ws)
     buf = io.BytesIO()

@@ -163,6 +163,105 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
+/* Tableau synoptique des résultats scolaires */
+.yn-synoptic-sheet {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.yn-synoptic-table {
+    border-collapse: collapse;
+    width: 100%;
+    border: 1.5px solid #1e293b;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.yn-synoptic-table thead th {
+    background-color: #1e3a8a !important;
+    color: #ffffff !important;
+    border: 1px solid #1e293b !important;
+    font-weight: 700;
+    text-align: center;
+    padding: 0.55rem 0.65rem;
+}
+
+.yn-synoptic-table td {
+    border: 1px solid #64748b;
+    padding: 0.38rem 0.65rem;
+    vertical-align: middle;
+}
+
+.yn-synoptic-disc-cell {
+    background-color: #f8fafc;
+    font-weight: 700;
+    border-right: 1.5px solid #1e293b !important;
+}
+
+.yn-synoptic-disc-summary {
+    background-color: #eff6ff;
+    font-weight: 700;
+    color: #1e3a8a;
+    border-right: 1.5px solid #1e293b !important;
+}
+
+.yn-synoptic-col-boys {
+    border-left: 1.5px solid #1e293b !important;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    width: 115px;
+}
+
+.yn-synoptic-col-girls {
+    border-left: 1px solid #475569 !important;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    width: 115px;
+}
+
+.yn-synoptic-col-total {
+    border-left: 1.5px solid #1e293b !important;
+    background-color: #f3f4f6;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    width: 120px;
+}
+
+.yn-synoptic-row-alt td:not(.yn-synoptic-disc-cell):not(.yn-synoptic-disc-summary):not(.yn-synoptic-col-total) {
+    background-color: #fafafa;
+}
+
+.yn-synoptic-row-pass td:not(.yn-synoptic-disc-cell):not(.yn-synoptic-disc-summary) {
+    background-color: #ecfdf5 !important;
+    color: #065f46 !important;
+    font-weight: 700;
+}
+
+.yn-synoptic-row-fail td:not(.yn-synoptic-disc-cell):not(.yn-synoptic-disc-summary) {
+    background-color: #fef2f2 !important;
+    color: #991b1b !important;
+    font-weight: 700;
+    border-bottom: 2px solid #1e293b !important;
+}
+
+.yn-synoptic-block-end {
+    border-bottom: 2px solid #1e293b !important;
+}
+
+.yn-stamp-box {
+    border: 1.5px dashed #64748b;
+    border-radius: 4px;
+    min-height: 92px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+}
+
 @media (max-width: 991.98px) {
     .yn-sidebar {
         width: 100%;

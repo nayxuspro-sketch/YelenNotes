@@ -36,6 +36,7 @@ from yelen_notes.services.calculation_service import (
     PeriodClassResults,
     StudentAnnualComputed,
     StudentPeriodComputed,
+    SynopticPeriodReport,
     format_compact_decimal_fr,
     format_decimal_fr,
 )
@@ -1091,3 +1092,276 @@ def generate_annual_bulletins_pdf(
 
     doc.build(story, onFirstPage=_footer_canvas_callback, onLaterPages=_footer_canvas_callback)
     return buf.getvalue()
+
+
+def generate_synoptic_period_pdf(
+    settings: EstablishmentSettings,
+    paths: RuntimePaths,
+    synoptic: SynopticPeriodReport,
+    *,
+    use_landscape: bool = True,
+) -> bytes:
+    """Génère le TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES par période d'évaluation en PDF A4."""
+    font_reg, font_bold = ensure_pdf_fonts(paths.fonts_dir)
+    styles = _build_styles(font_reg, font_bold)
+
+    page_size = landscape(A4) if use_landscape else A4
+    margin = 11 * mm
+    usable_width = page_size[0] - 2 * margin
+
+    ac = synoptic.academic_class
+    period = synoptic.period
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=page_size,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=10 * mm,
+        bottomMargin=15 * mm,
+        title=f"Tableau synoptique des résultats scolaires - {ac.name} - {period.name}",
+    )
+
+    story: list = []
+    story.extend(_build_official_header(settings, paths, ac.school_year.label, styles, usable_width))
+    story.append(Paragraph("TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES", styles["doc_title"]))
+
+    subj_scope_label = "Ensemble des disciplines évaluées"
+    if synoptic.selected_subject_id is not None and synoptic.subject_rows:
+        subj_scope_label = f"Discipline : {synoptic.subject_rows[0].subject.name}"
+
+    story.append(
+        Paragraph(
+            f"<b>Classe :</b> {_safe(ac.name)} &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"<b>Période d'évaluation :</b> {_safe(period.name)} &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"<b>{_safe(subj_scope_label)}</b><br/>"
+            f"Effectif actif inscrit : <b>{synoptic.enrolled_boys}</b> Garçon(s) + "
+            f"<b>{synoptic.enrolled_girls}</b> Fille(s) = <b>{synoptic.enrolled_total}</b> Élève(s)",
+            styles["subtitle"],
+        )
+    )
+
+    pass_rate_style = ParagraphStyle(
+        "SynPassRate",
+        parent=styles["cell_bold_center"],
+        textColor=colors.HexColor("#065F46"),
+    )
+    pass_label_style = ParagraphStyle(
+        "SynPassLabel",
+        parent=styles["cell_bold"],
+        textColor=colors.HexColor("#065F46"),
+    )
+    fail_rate_style = ParagraphStyle(
+        "SynFailRate",
+        parent=styles["cell_bold_center"],
+        textColor=colors.HexColor("#991B1B"),
+    )
+    fail_label_style = ParagraphStyle(
+        "SynFailLabel",
+        parent=styles["cell_bold"],
+        textColor=colors.HexColor("#991B1B"),
+    )
+
+    table_data: list[list] = [
+        [
+            Paragraph("<b>Discipline</b>", styles["cell_bold_center"]),
+            Paragraph("<b>Indicateurs statistiques</b>", styles["cell_bold_center"]),
+            Paragraph("<b>Garçons</b>", styles["cell_bold_center"]),
+            Paragraph("<b>Filles</b>", styles["cell_bold_center"]),
+            Paragraph("<b>Total</b>", styles["cell_bold_center"]),
+        ]
+    ]
+
+    style_cmds: list = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#4B5563")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        # Séparation franche entre Garçons, Filles et Total
+        ("LINEBEFORE", (2, 0), (2, -1), 0.9, colors.HexColor("#1F2937")),
+        ("LINEBEFORE", (3, 0), (3, -1), 0.7, colors.HexColor("#374151")),
+        ("LINEBEFORE", (4, 0), (4, -1), 0.9, colors.HexColor("#1F2937")),
+    ]
+
+    # Modifier la couleur du texte d'en-tête pour qu'il ressorte en blanc sur fond bleu officiel
+    white_hdr = ParagraphStyle("SynHdrWhite", parent=styles["cell_bold_center"], textColor=colors.white)
+    table_data[0] = [
+        Paragraph("<b>Discipline</b>", white_hdr),
+        Paragraph("<b>Indicateurs statistiques</b>", white_hdr),
+        Paragraph("<b>Garçons</b>", white_hdr),
+        Paragraph("<b>Filles</b>", white_hdr),
+        Paragraph("<b>Total</b>", white_hdr),
+    ]
+
+    def _append_synoptic_block(
+        disc_html: str,
+        boys_b,
+        girls_b,
+        total_b,
+        *,
+        is_overall_summary: bool = False,
+    ) -> None:
+        r0 = len(table_data)
+        table_data.append(
+            [
+                Paragraph(disc_html, styles["cell_bold_center"] if is_overall_summary else styles["cell_bold"]),
+                Paragraph("Effectif ayant composé", styles["cell"]),
+                Paragraph(str(boys_b.composed), styles["cell_center"]),
+                Paragraph(str(girls_b.composed), styles["cell_center"]),
+                Paragraph(f"<b>{total_b.composed}</b>", styles["cell_bold_center"]),
+            ]
+        )
+        table_data.append(
+            [
+                "",
+                Paragraph("Effectif ayant obtenu la moyenne", styles["cell"]),
+                Paragraph(str(boys_b.passed), styles["cell_center"]),
+                Paragraph(str(girls_b.passed), styles["cell_center"]),
+                Paragraph(f"<b>{total_b.passed}</b>", styles["cell_bold_center"]),
+            ]
+        )
+        table_data.append(
+            [
+                "",
+                Paragraph("Effectif n'ayant pas obtenu la moyenne", styles["cell"]),
+                Paragraph(str(boys_b.failed), styles["cell_center"]),
+                Paragraph(str(girls_b.failed), styles["cell_center"]),
+                Paragraph(f"<b>{total_b.failed}</b>", styles["cell_bold_center"]),
+            ]
+        )
+        table_data.append(
+            [
+                "",
+                Paragraph("<b>Taux de réussite (%)</b>", pass_label_style),
+                Paragraph(f"<b>{_safe(boys_b.display_pass_rate)}</b>", pass_rate_style),
+                Paragraph(f"<b>{_safe(girls_b.display_pass_rate)}</b>", pass_rate_style),
+                Paragraph(f"<b>{_safe(total_b.display_pass_rate)}</b>", pass_rate_style),
+            ]
+        )
+        table_data.append(
+            [
+                "",
+                Paragraph("<b>Taux d'échec (%)</b>", fail_label_style),
+                Paragraph(f"<b>{_safe(boys_b.display_fail_rate)}</b>", fail_rate_style),
+                Paragraph(f"<b>{_safe(girls_b.display_fail_rate)}</b>", fail_rate_style),
+                Paragraph(f"<b>{_safe(total_b.display_fail_rate)}</b>", fail_rate_style),
+            ]
+        )
+
+        style_cmds.extend(
+            [
+                ("SPAN", (0, r0), (0, r0 + 4)),
+                ("NOSPLIT", (0, r0), (-1, r0 + 4)),
+                ("BACKGROUND", (0, r0), (0, r0 + 4), colors.HexColor("#EFF6FF" if is_overall_summary else "#F8FAFC")),
+                ("BACKGROUND", (4, r0), (4, r0 + 2), colors.HexColor("#F3F4F6")),
+                ("BACKGROUND", (1, r0 + 1), (3, r0 + 1), colors.HexColor("#FAFAFA")),
+                ("BACKGROUND", (1, r0 + 3), (-1, r0 + 3), colors.HexColor("#ECFDF5")),
+                ("BACKGROUND", (1, r0 + 4), (-1, r0 + 4), colors.HexColor("#FEF2F2")),
+                ("LINEBELOW", (0, r0 + 4), (-1, r0 + 4), 1.2, colors.HexColor("#1F2937")),
+            ]
+        )
+        if is_overall_summary:
+            style_cmds.append(("LINEABOVE", (0, r0), (-1, r0), 1.5, colors.HexColor("#1E3A8A")))
+
+    for s_row in synoptic.subject_rows:
+        subj = s_row.subject
+        disc_html = (
+            f"<b>{_safe(subj.name)}</b><br/>"
+            f"<font size='7' color='#4B5563'>"
+            f"Barème /{format_compact_decimal_fr(subj.max_score)} — "
+            f"Seuil : {format_compact_decimal_fr(s_row.pass_threshold_raw)}/{format_compact_decimal_fr(subj.max_score)}"
+            f"</font>"
+        )
+        _append_synoptic_block(disc_html, s_row.boys, s_row.girls, s_row.total, is_overall_summary=False)
+
+    if synoptic.selected_subject_id is None and synoptic.subject_rows:
+        gen_scale_str = format_compact_decimal_fr(synoptic.period_results.general_scale)
+        gen_thresh_str = format_compact_decimal_fr(synoptic.pass_threshold_general)
+        summary_html = (
+            f"<b>SYNTHÈSE GÉNÉRALE DE LA CLASSE</b><br/>"
+            f"<font size='7' color='#1E3A8A'>"
+            f"Moyenne périodique /{gen_scale_str} (Seuil : {gen_thresh_str}/{gen_scale_str})"
+            f"</font>"
+        )
+        _append_synoptic_block(
+            summary_html,
+            synoptic.overall_boys,
+            synoptic.overall_girls,
+            synoptic.overall_total,
+            is_overall_summary=True,
+        )
+
+    if not synoptic.subject_rows:
+        table_data.append(
+            [
+                Paragraph("Aucune discipline configurée pour cette classe.", styles["cell_center"]),
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        style_cmds.append(("SPAN", (0, 1), (-1, 1)))
+
+    col_disc = usable_width * 0.25
+    col_ind = usable_width * 0.36
+    col_num = (usable_width - col_disc - col_ind) / 3.0
+    col_widths = [col_disc, col_ind, col_num, col_num, col_num]
+
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle(style_cmds))
+    story.append(tbl)
+
+    # Pied de page officiel : date de génération, titulaire, cachet et signature du responsable
+    story.append(Spacer(1, 6 * mm))
+    now_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    today_str = datetime.now().strftime("%d/%m/%Y")
+    place_line = (
+        f"Fait à {_safe(settings.locality)}, le {today_str}"
+        if settings.locality
+        else f"Édité le {today_str}"
+    )
+
+    sig_titulaire = Paragraph(
+        f"<b>Le / La Titulaire de la classe</b><br/><br/><br/><br/>{_safe(ac.titulaire_name)}",
+        styles["cell_center"],
+    )
+    stamp_box = Paragraph(
+        "<b>Cachet de l'établissement</b><br/><br/><br/><br/>&nbsp;",
+        styles["cell_center"],
+    )
+    sig_director = Paragraph(
+        f"{place_line}<br/><b>{_safe(ac.director_title)}</b><br/><br/><br/><b>{_safe(ac.director_name)}</b>",
+        styles["cell_center"],
+    )
+    footer_tbl = Table(
+        [[sig_titulaire, stamp_box, sig_director]],
+        colWidths=[usable_width * 0.35, usable_width * 0.28, usable_width * 0.37],
+    )
+    footer_tbl.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOX", (1, 0), (1, 0), 0.7, colors.HexColor("#6B7280"), None, (3, 3)),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(
+        KeepTogether(
+            [
+                Paragraph(f"<i>Fiche générée automatiquement le {now_str}.</i>", styles["small"]),
+                Spacer(1, 2 * mm),
+                footer_tbl,
+            ]
+        )
+    )
+
+    doc.build(story, onFirstPage=_footer_canvas_callback, onLaterPages=_footer_canvas_callback)
+    return buf.getvalue()
+

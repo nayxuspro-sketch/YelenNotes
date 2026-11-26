@@ -14,6 +14,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -25,23 +26,27 @@ from yelen_notes.models import (
     AcademicClass,
     EstablishmentSettings,
     EvaluationPeriod,
+    SchoolYear,
 )
 from yelen_notes.paths import RuntimePaths
 from yelen_notes.security import get_accessible_classes_query, user_can_view_class
 from yelen_notes.services.calculation_service import (
     compute_annual_class_results,
     compute_period_class_results,
+    compute_synoptic_period_report,
 )
 from yelen_notes.services.excel_service import (
     export_annual_ranking_to_excel,
     export_period_ranking_to_excel,
     export_period_releve_to_excel,
+    export_synoptic_period_to_excel,
 )
 from yelen_notes.services.pdf_service import (
     generate_annual_bulletins_pdf,
     generate_merit_ranking_pdf,
     generate_period_releve_pdf,
     generate_periodic_bulletins_pdf,
+    generate_synoptic_period_pdf,
 )
 
 reports_bp = Blueprint("reports", __name__)
@@ -337,5 +342,112 @@ def bulletins_pdf():
         io.BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=(not inline),
+        download_name=fname,
+    )
+
+
+@reports_bp.route("/resultats/tableau-synoptique")
+@login_required
+def synoptic_report():
+    """Fiche statistique « TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES » par période d'évaluation."""
+    from datetime import datetime
+
+    # Permettre la sélection directe de l'année scolaire sur la fiche (§2 & §6.1)
+    requested_year_id = request.args.get("year_id", type=int)
+    if requested_year_id is not None:
+        yr_obj = db.session.get(SchoolYear, requested_year_id)
+        if yr_obj is not None:
+            session["selected_school_year_id"] = yr_obj.id
+
+    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    selected_year, classes, periods, selected_class, selected_period = _select_context()
+    subject_id = request.args.get("subject_id", type=int)
+    orientation = request.args.get("orientation", "landscape")
+    if orientation not in ("landscape", "portrait"):
+        orientation = "landscape"
+
+    settings = EstablishmentSettings.get_singleton()
+    paths: RuntimePaths = current_app.config["RUNTIME_PATHS"]
+    has_logo = bool(
+        settings.logo_filename and (paths.logos_dir / settings.logo_filename).is_file()
+    )
+
+    synoptic = None
+    if selected_class and selected_period:
+        synoptic = compute_synoptic_period_report(
+            selected_class, selected_period, subject_id=subject_id
+        )
+
+    return render_template(
+        "reports/synoptic.html",
+        settings=settings,
+        has_logo=has_logo,
+        all_years=all_years,
+        selected_year=selected_year,
+        classes=classes,
+        periods=periods,
+        selected_class=selected_class,
+        selected_period=selected_period,
+        selected_subject_id=synoptic.selected_subject_id if synoptic else None,
+        orientation=orientation,
+        synoptic=synoptic,
+        generated_at=datetime.now(),
+    )
+
+
+@reports_bp.route("/resultats/tableau-synoptique/pdf")
+@login_required
+def synoptic_report_pdf():
+    class_id = request.args.get("class_id", type=int)
+    period_id = request.args.get("period_id", type=int)
+    subject_id = request.args.get("subject_id", type=int)
+    orientation = request.args.get("orientation", "landscape")
+    inline = request.args.get("inline") == "1"
+
+    ac = db.get_or_404(AcademicClass, class_id)
+    period = db.get_or_404(EvaluationPeriod, period_id)
+    if not user_can_view_class(current_user, ac.id) or ac.school_year_id != period.school_year_id:
+        abort(403)
+
+    settings = EstablishmentSettings.get_singleton()
+    paths: RuntimePaths = current_app.config["RUNTIME_PATHS"]
+    synoptic = compute_synoptic_period_report(ac, period, subject_id=subject_id)
+    pdf_bytes = generate_synoptic_period_pdf(
+        settings,
+        paths,
+        synoptic,
+        use_landscape=(orientation != "portrait"),
+    )
+
+    fname = f"tableau_synoptique_{ac.name.replace(' ', '_')}_{period.short_code}_{ac.school_year.label}.pdf"
+    _archive_document(paths.releves_dir, fname, pdf_bytes)
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=(not inline),
+        download_name=fname,
+    )
+
+
+@reports_bp.route("/resultats/tableau-synoptique/excel")
+@login_required
+def synoptic_report_excel():
+    class_id = request.args.get("class_id", type=int)
+    period_id = request.args.get("period_id", type=int)
+    subject_id = request.args.get("subject_id", type=int)
+
+    ac = db.get_or_404(AcademicClass, class_id)
+    period = db.get_or_404(EvaluationPeriod, period_id)
+    if not user_can_view_class(current_user, ac.id) or ac.school_year_id != period.school_year_id:
+        abort(403)
+
+    settings = EstablishmentSettings.get_singleton()
+    synoptic = compute_synoptic_period_report(ac, period, subject_id=subject_id)
+    xlsx_bytes = export_synoptic_period_to_excel(settings, synoptic)
+    fname = f"tableau_synoptique_{ac.name.replace(' ', '_')}_{period.short_code}_{ac.school_year.label}.xlsx"
+    return send_file(
+        io.BytesIO(xlsx_bytes),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
         download_name=fname,
     )
