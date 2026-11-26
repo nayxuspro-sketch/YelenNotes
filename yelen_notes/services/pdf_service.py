@@ -992,13 +992,18 @@ def _build_single_annual_bulletin_flowables(
         if annual_results.annual_mode == ANNUAL_WEIGHTED
         else "Moyenne arithmétique des périodes"
     )
-    decision_str = enr.annual_decision or "À délibérer"
+    decision_str = student_row.annual_decision_mention
+    decision_line = (
+        f"<b>DÉCISION DE FIN D'ANNÉE :</b> {_safe(decision_str)}"
+        if decision_str
+        else "<b>DÉCISION DE FIN D'ANNÉE :</b> "
+    )
 
     syn_left = Paragraph(
         f"<font size=10><b>MOYENNE ANNUELLE : {_safe(student_row.display_annual_average)} / {gen_scale_str}</b></font><br/>"
         f"<b>RANG ANNUEL :</b> {_safe(student_row.rank_label)} sur {len(annual_results.ranked_rows)} classés<br/>"
         f"<b>APPRÉCIATION ANNUELLE :</b> {_safe(student_row.appreciation or '—')}<br/>"
-        f"<b>DÉCISION DE FIN D'ANNÉE :</b> {_safe(decision_str)}",
+        f"{decision_line}",
         styles["cell"],
     )
     syn_right = Paragraph(

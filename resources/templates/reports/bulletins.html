@@ -250,9 +250,14 @@
                 </tbody>
             </table>
             <div class="border rounded p-2 bg-light small mb-2">
-                <strong>MOYENNE ANNUELLE : {{ prev_row.display_annual_average }} /{{ res.general_scale | compact_fr }}</strong> ·
-                <strong>RANG ANNUEL :</strong> {{ prev_row.rank_label }} ·
-                <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
+                <div>
+                    <strong>MOYENNE ANNUELLE : {{ prev_row.display_annual_average }} /{{ res.general_scale | compact_fr }}</strong> ·
+                    <strong>RANG ANNUEL :</strong> {{ prev_row.rank_label }} ·
+                    <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
+                </div>
+                <div class="mt-1">
+                    <strong>DÉCISION DE FIN D'ANNÉE :</strong>{% if prev_row.annual_decision_mention %} {{ prev_row.annual_decision_mention }}{% endif %}
+                </div>
             </div>
             {% endif %}
 
