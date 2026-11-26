@@ -16,6 +16,7 @@ from yelen_notes.models import (
     ANNUAL_SIMPLE,
     ROLE_ADMIN,
     ROLE_DIRECTEUR,
+    ROLE_ENSEIGNANT,
     ROUNDING_HALF_UP,
     ROUNDING_MODES,
     TIE_COMPETITION,
@@ -30,6 +31,7 @@ from yelen_notes.security import (
     get_accessible_classes_query,
     record_audit_log,
     roles_required,
+    user_can_manage_class_subjects,
     user_can_view_class,
 )
 from yelen_notes.services.calculation_service import (
@@ -197,20 +199,97 @@ def update_class(class_id: int):
     return redirect(url_for("academics.classes_list", year_id=ac.school_year_id))
 
 
+@academics_bp.route("/matieres-et-baremes")
+@login_required
+def subjects_entry_shortcut():
+    """Accès direct aux matières et barèmes de la classe accessible de l'utilisateur."""
+    selected_year = get_selected_school_year()
+    accessible_classes = (
+        get_accessible_classes_query(current_user, selected_year.id).all()
+        if selected_year
+        else []
+    )
+    if accessible_classes:
+        return redirect(url_for("academics.class_subjects", class_id=accessible_classes[0].id))
+    return redirect(url_for("academics.classes_list"))
+
+
 @academics_bp.route("/classes/<int:class_id>/matieres", methods=["GET", "POST"])
 @login_required
 def class_subjects(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
     if not user_can_view_class(current_user, ac.id):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Accès refusé aux matières de {ac.name} pour {current_user.username} ({current_user.role})",
+            commit=True,
+        )
         abort(403)
 
-    can_edit = (current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)) and not ac.school_year.is_closed
+    can_edit = user_can_manage_class_subjects(current_user, ac)
     policy = resolve_policy_for_class(ac)
     default_ref_scale = policy.general_average_scale if policy else Decimal("10.00")
 
     if request.method == "POST":
         if not can_edit:
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Ajout/copie de matière refusé sur {ac.name} pour {current_user.username} ({current_user.role})",
+                commit=True,
+            )
             abort(403)
+
+        if request.form.get("action") == "copy_subjects":
+            source_id = request.form.get("source_class_id", type=int)
+            source_cls = db.session.get(AcademicClass, source_id) if source_id else None
+            if source_cls is None or source_cls.id == ac.id:
+                flash("Veuillez sélectionner une classe source valide.", "danger")
+                return redirect(url_for("academics.class_subjects", class_id=ac.id))
+
+            existing_names = {
+                s.name.strip().lower() for s in Subject.query.filter_by(class_id=ac.id).all()
+            }
+            max_ord = (
+                db.session.query(db.func.max(Subject.display_order))
+                .filter_by(class_id=ac.id)
+                .scalar()
+                or 0
+            )
+            copied = 0
+            for src_s in source_cls.subjects:
+                if src_s.name.strip().lower() in existing_names:
+                    continue
+                max_ord += 1
+                db.session.add(
+                    Subject(
+                        class_id=ac.id,
+                        name=src_s.name,
+                        short_label=src_s.short_label,
+                        coefficient=src_s.coefficient,
+                        min_score=src_s.min_score,
+                        max_score=src_s.max_score,
+                        reference_scale=src_s.reference_scale,
+                        include_in_average=src_s.include_in_average,
+                        allow_exemption=src_s.allow_exemption,
+                        display_order=max_ord,
+                        is_active=src_s.is_active,
+                    )
+                )
+                existing_names.add(src_s.name.strip().lower())
+                copied += 1
+
+            record_audit_log(
+                "SUBJECT_COPY",
+                f"Copie de {copied} matière(s) depuis {source_cls.name} ({source_cls.school_year.label}) vers {ac.name}",
+                target_type="AcademicClass",
+                target_id=ac.id,
+                commit=True,
+            )
+            if copied:
+                flash(f"{copied} matière(s) et leurs barèmes ont été copiés dans {ac.name}.", "success")
+            else:
+                flash("Toutes les matières de la classe source figurent déjà dans cette classe.", "info")
+            return redirect(url_for("academics.class_subjects", class_id=ac.id))
 
         name = (request.form.get("name") or "").strip()
         short_label = (request.form.get("short_label") or "").strip() or None
@@ -280,9 +359,21 @@ def class_subjects(class_id: int):
         return redirect(url_for("academics.class_subjects", class_id=ac.id))
 
     subjects = Subject.query.filter_by(class_id=ac.id).order_by(Subject.display_order, Subject.name).all()
+    accessible_classes = get_accessible_classes_query(current_user, ac.school_year_id).all()
+    copyable_classes = (
+        AcademicClass.query.join(SchoolYear)
+        .filter(AcademicClass.id != ac.id)
+        .order_by(SchoolYear.label.desc(), AcademicClass.display_order, AcademicClass.name)
+        .all()
+        if can_edit
+        else []
+    )
+    copyable_classes = [c for c in copyable_classes if len(c.subjects) > 0]
     return render_template(
         "academics/subjects.html",
         academic_class=ac,
+        accessible_classes=accessible_classes,
+        copyable_classes=copyable_classes,
         subjects=subjects,
         policy=policy,
         default_ref_scale=default_ref_scale,
@@ -291,13 +382,17 @@ def class_subjects(class_id: int):
 
 
 @academics_bp.route("/matieres/<int:subject_id>/modifier", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@login_required
 def update_subject(subject_id: int):
     subj = db.get_or_404(Subject, subject_id)
     ac = subj.academic_class
-    if ac.school_year.is_closed:
-        flash("Impossible de modifier une matière d'une année clôturée.", "danger")
-        return redirect(url_for("academics.class_subjects", class_id=ac.id))
+    if not user_can_manage_class_subjects(current_user, ac):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Modification de matière refusée sur {subj.name} ({ac.name}) pour {current_user.username} ({current_user.role})",
+            commit=True,
+        )
+        abort(403)
 
     name = (request.form.get("name") or "").strip()
     short_label = (request.form.get("short_label") or "").strip() or None
@@ -357,18 +452,50 @@ def policies_and_scales():
     year_id = request.args.get("year_id", type=int) or request.form.get("year_id", type=int)
     selected_year = db.session.get(SchoolYear, year_id) if year_id else get_selected_school_year()
 
-    raw_class_id = request.args.get("class_id") or request.form.get("class_id") or ""
-    target_class_id = int(raw_class_id) if raw_class_id.isdigit() else None
-    target_class = db.session.get(AcademicClass, target_class_id) if target_class_id else None
-    if target_class and selected_year and target_class.school_year_id != selected_year.id:
-        target_class = None
-        target_class_id = None
-
-    can_edit = (
-        current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
-        and selected_year is not None
-        and not selected_year.is_closed
+    year_classes = (
+        get_accessible_classes_query(current_user, selected_year.id).all()
+        if selected_year
+        else []
     )
+
+    raw_class_id = request.args.get("class_id")
+    if raw_class_id is None and request.method == "POST":
+        raw_class_id = request.form.get("class_id") or ""
+
+    # Pour un enseignant titulaire, sélectionner par défaut sa classe s'il n'a pas demandé explicitement la règle année entière
+    if (
+        raw_class_id is None
+        and request.method == "GET"
+        and current_user.role == ROLE_ENSEIGNANT
+        and request.args.get("scope") != "year"
+        and year_classes
+    ):
+        target_class = year_classes[0]
+        target_class_id = target_class.id
+    else:
+        raw_class_str = (raw_class_id or "").strip()
+        target_class_id = int(raw_class_str) if raw_class_str.isdigit() else None
+        target_class = db.session.get(AcademicClass, target_class_id) if target_class_id else None
+        if target_class and selected_year and target_class.school_year_id != selected_year.id:
+            target_class = None
+            target_class_id = None
+
+    if target_class is not None and not user_can_view_class(current_user, target_class.id):
+        record_audit_log(
+            "ACCESS_DENIED",
+            f"Accès refusé aux barèmes de {target_class.name} pour {current_user.username} ({current_user.role})",
+            commit=True,
+        )
+        abort(403)
+
+    if target_class is not None:
+        can_edit = user_can_manage_class_subjects(current_user, target_class)
+    else:
+        can_edit = (
+            current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+            and selected_year is not None
+            and not selected_year.is_closed
+        )
 
     policy = (
         CalculationPolicy.query.filter_by(
@@ -378,11 +505,25 @@ def policies_and_scales():
         if selected_year
         else None
     )
+    year_default_policy = (
+        CalculationPolicy.query.filter_by(
+            school_year_id=selected_year.id,
+            class_id=None,
+        ).first()
+        if (selected_year and target_class_id is not None)
+        else None
+    )
+    display_policy = policy or year_default_policy
 
     scale_warnings: list[str] = []
 
     if request.method == "POST":
         if not can_edit or selected_year is None:
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Modification des barèmes/règles refusée sur {request.path} (class_id={target_class_id}) pour {current_user.username} ({current_user.role})",
+                commit=True,
+            )
             abort(403)
 
         if request.form.get("action") == "delete_override" and target_class_id and policy:
@@ -508,7 +649,7 @@ def policies_and_scales():
             url_for("academics.policies_and_scales", year_id=selected_year.id, class_id=target_class_id or "")
         )
 
-    if policy is not None and policy.scale_items:
+    if display_policy is not None and display_policy.scale_items:
         chk = validate_grading_scale_intervals(
             [
                 {
@@ -516,26 +657,21 @@ def policies_and_scales():
                     "max_score": str(it.max_score),
                     "appreciation": it.appreciation,
                 }
-                for it in policy.scale_items
+                for it in display_policy.scale_items
             ],
-            Decimal(str(policy.general_average_scale)),
+            Decimal(str(display_policy.general_average_scale)),
         )
         scale_warnings = chk.warnings
 
-    year_classes = (
-        AcademicClass.query.filter_by(school_year_id=selected_year.id)
-        .order_by(AcademicClass.display_order, AcademicClass.name)
-        .all()
-        if selected_year
-        else []
-    )
     return render_template(
         "academics/policies_scales.html",
         all_years=all_years,
         selected_year=selected_year,
         year_classes=year_classes,
         target_class=target_class,
-        policy=policy,
+        policy=display_policy,
+        has_class_override=(policy is not None and target_class is not None),
+        using_inherited_policy=(policy is None and year_default_policy is not None and target_class is not None),
         scale_warnings=scale_warnings,
         can_edit=can_edit,
     )

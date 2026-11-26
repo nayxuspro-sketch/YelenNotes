@@ -110,6 +110,11 @@
                     <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-primary">
                         Saisir les notes
                     </a>
+                    {% if selected_class %}
+                    <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}" class="btn btn-sm btn-outline-primary">
+                        Matières & barèmes ({{ selected_class.name }})
+                    </a>
+                    {% endif %}
                     <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-outline-secondary">
                         Éditer les bulletins PDF
                     </a>

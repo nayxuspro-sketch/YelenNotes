@@ -417,3 +417,181 @@ def test_teacher_can_edit_assigned_class_student_identities_and_info(app, client
         },
     ).status_code == 403
 
+
+def test_teacher_can_add_and_update_subjects_and_scales_for_assigned_class_only(
+    app, client, configured_school
+):
+    """Vérifie que le titulaire peut ajouter/modifier les matières et barèmes de sa classe uniquement."""
+    with app.app_context():
+        ce1 = db.session.get(AcademicClass, configured_school["ce1_id"])
+        ce1_subj = Subject(
+            class_id=ce1.id,
+            name="Dessin CE1",
+            short_label="Des",
+            coefficient=1,
+            min_score=0,
+            max_score=10,
+            reference_scale=10,
+            display_order=1,
+            is_active=True,
+        )
+        db.session.add(ce1_subj)
+        db.session.commit()
+        cm2_id = configured_school["cm2_id"]
+        ce1_id = ce1.id
+        ce1_subj_id = ce1_subj.id
+        year_id = configured_school["year_id"]
+
+    _login_client(client, "titulaire_cm2", "Titulaire2026!")
+
+    # 1. Raccourci menu « Matières & Barèmes » redirige vers la classe affectée CM2
+    shortcut_resp = client.get("/matieres-et-baremes", follow_redirects=False)
+    assert shortcut_resp.status_code == 302
+    assert f"/classes/{cm2_id}/matieres" in shortcut_resp.headers["Location"]
+
+    subj_page = client.get(f"/classes/{cm2_id}/matieres")
+    assert subj_page.status_code == 200
+    assert "Ajouter une matière et son barème" in subj_page.data.decode("utf-8")
+    tok = extract_csrf_token(subj_page.data)
+
+    # 2. Ajout d'une nouvelle matière et de son barème (/20 ramené sur /10, coef 2) par le titulaire
+    add_resp = client.post(
+        f"/classes/{cm2_id}/matieres",
+        data={
+            "csrf_token": tok,
+            "name": "Histoire-Géographie",
+            "short_label": "Hist-Géo",
+            "display_order": "10",
+            "min_score": "0",
+            "max_score": "20",
+            "reference_scale": "10",
+            "coefficient": "2",
+            "include_in_average": "1",
+            "allow_exemption": "1",
+        },
+        follow_redirects=True,
+    )
+    assert add_resp.status_code == 200
+    assert "Histoire-Géographie" in add_resp.data.decode("utf-8")
+
+    with app.app_context():
+        created = Subject.query.filter_by(class_id=cm2_id, name="Histoire-Géographie").first()
+        assert created is not None
+        assert float(created.max_score) == 20.0
+        assert float(created.reference_scale) == 10.0
+        assert float(created.coefficient) == 2.0
+        created_id = created.id
+
+    # 3. Modification du barème et du coefficient de cette matière par le titulaire
+    upd_resp = client.post(
+        f"/matieres/{created_id}/modifier",
+        data={
+            "csrf_token": tok,
+            "name": "Histoire-Géographie & ECM",
+            "short_label": "HG-ECM",
+            "min_score": "0",
+            "max_score": "10",
+            "reference_scale": "10",
+            "coefficient": "1,5",
+            "display_order": "10",
+            "include_in_average": "1",
+            "allow_exemption": "1",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+    )
+    assert upd_resp.status_code == 200
+    with app.app_context():
+        refreshed = db.session.get(Subject, created_id)
+        assert refreshed.name == "Histoire-Géographie & ECM"
+        assert float(refreshed.max_score) == 10.0
+        assert float(refreshed.coefficient) == 1.5
+
+    # 4. Copie de matières manquantes depuis une autre classe dans CM2
+    copy_resp = client.post(
+        f"/classes/{cm2_id}/matieres",
+        data={
+            "csrf_token": tok,
+            "action": "copy_subjects",
+            "source_class_id": str(ce1_id),
+        },
+        follow_redirects=True,
+    )
+    assert copy_resp.status_code == 200
+    with app.app_context():
+        assert Subject.query.filter_by(class_id=cm2_id, name="Dessin CE1").first() is not None
+
+    # 5. Le titulaire peut définir le barème général & la grille d'appréciations spécifiques de SA classe CM2
+    pol_page = client.get("/regles-et-appreciations")
+    assert pol_page.status_code == 200
+    assert "Règle spécifique : CM2" in pol_page.data.decode("utf-8")
+    tok_pol = extract_csrf_token(pol_page.data)
+
+    pol_save = client.post(
+        "/regles-et-appreciations",
+        data={
+            "csrf_token": tok_pol,
+            "year_id": str(year_id),
+            "class_id": str(cm2_id),
+            "general_average_scale": "10",
+            "decimal_places": "2",
+            "rounding_mode": "ROUND_HALF_UP",
+            "absence_policy": "ZERO",
+            "tie_breaking_mode": "COMPETITION",
+            "annual_average_mode": "SIMPLE",
+            "annual_require_all_periods": "1",
+            "scale_min[]": ["0", "5", "8"],
+            "scale_max[]": ["5", "8", "10"],
+            "scale_label[]": ["Insuffisant", "Bien", "Très bien"],
+        },
+        follow_redirects=True,
+    )
+    assert pol_save.status_code == 200
+    assert "enregistrées avec succès" in pol_save.data.decode("utf-8")
+
+    # 6. Isolation stricte : le titulaire NE PEUT PAS modifier la règle générale de l'école entière,
+    #    ni accéder/modifier les matières et barèmes d'une classe non affectée (CE1)
+    assert (
+        client.post(
+            "/regles-et-appreciations",
+            data={
+                "csrf_token": tok_pol,
+                "year_id": str(year_id),
+                "class_id": "",
+                "general_average_scale": "20",
+            },
+        ).status_code
+        == 403
+    )
+    assert client.get(f"/regles-et-appreciations?year_id={year_id}&class_id={ce1_id}").status_code == 403
+    assert client.get(f"/classes/{ce1_id}/matieres").status_code == 403
+    assert (
+        client.post(
+            f"/classes/{ce1_id}/matieres",
+            data={
+                "csrf_token": tok_pol,
+                "name": "Interdit",
+                "min_score": "0",
+                "max_score": "10",
+                "reference_scale": "10",
+                "coefficient": "1",
+            },
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/matieres/{ce1_subj_id}/modifier",
+            data={
+                "csrf_token": tok_pol,
+                "name": "Interdit",
+                "min_score": "0",
+                "max_score": "10",
+                "reference_scale": "10",
+                "coefficient": "1",
+            },
+        ).status_code
+        == 403
+    )
+
+
