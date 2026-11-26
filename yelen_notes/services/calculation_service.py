@@ -1238,3 +1238,233 @@ def compute_synoptic_period_report(
         pass_threshold_general=pass_threshold_gen,
     )
 
+
+PROPOSITION_PASSE = "Passe"
+PROPOSITION_REDOUBLE = "Redouble"
+PROPOSITION_NON_DETERMINE = "Non déterminé"
+
+
+@dataclass
+class PropositionPeriodSlot:
+    """Colonne de période (1er T, 2e T, 3e T...) de la Fiche de proposition de fin d'année."""
+
+    slot_index: int
+    header_label: str
+    period: EvaluationPeriod | None
+
+
+@dataclass
+class StudentPropositionRow:
+    """Ligne individuelle d'un élève dans la Fiche de proposition de fin d'année."""
+
+    order_number: int
+    enrollment: ClassEnrollment
+    annual_computed: StudentAnnualComputed
+    full_name: str
+    age: int
+    age_display: str
+    sex: str
+    schooling_display: str
+    repeated_current_class: str
+    slot_displays: list[str]
+    display_annual_average_2dec: str
+    display_rank: str
+    auto_proposition: str
+    validated_decision: str
+
+
+@dataclass
+class EndOfYearPropositionReport:
+    """Fiche annuelle de synthèse « PROPOSITION DE FIN D'ANNÉE » d'une classe."""
+
+    academic_class: AcademicClass
+    annual_results: AnnualClassResults
+    period_slots: list[PropositionPeriodSlot]
+    rows: list[StudentPropositionRow]
+    pass_threshold: Decimal
+    total_students: int
+    girls_count: int
+    boys_count: int
+    passe_count: int
+    redouble_count: int
+    undetermined_count: int
+
+
+def _has_repeated_current_class(
+    enrollment: ClassEnrollment,
+    academic_class: AcademicClass,
+) -> bool:
+    """Détermine si l'élève a déjà redoublé la classe concernée à partir de son historique scolaire."""
+    import re
+
+    current_tokens = {
+        tok.strip().upper()
+        for tok in (academic_class.name, academic_class.level_label)
+        if tok and tok.strip()
+    }
+    cur_year = academic_class.school_year
+
+    # 1. Vérification dans l'historique pluriannuel des inscriptions de l'élève en base
+    for prev in enrollment.student.enrollments:
+        if prev.id == enrollment.id:
+            continue
+        prev_cls = prev.academic_class
+        if prev_cls is None or prev_cls.school_year_id == academic_class.school_year_id:
+            continue
+        prev_year = prev_cls.school_year
+        is_earlier = False
+        if prev_year and cur_year:
+            if prev_year.start_date and cur_year.start_date:
+                is_earlier = prev_year.start_date < cur_year.start_date
+            else:
+                is_earlier = prev_year.label < cur_year.label
+        if is_earlier:
+            prev_tokens = {
+                tok.strip().upper()
+                for tok in (prev_cls.name, prev_cls.level_label)
+                if tok and tok.strip()
+            }
+            if prev_tokens & current_tokens:
+                return True
+
+    # 2. Vérification dans la mention de redoublement enregistrée sur l'inscription
+    detail = (enrollment.repeated_class_detail or "").strip().upper()
+    if not detail:
+        return False
+    if detail in ("NON", "N", "0", "NEANT", "NÉANT", "AUCUN", "AUCUNE", "-", "—"):
+        return False
+    if detail in ("OUI", "REDOUBLANT", "REDOUBLANTE", "R", "1"):
+        return True
+
+    for tok in current_tokens:
+        if re.search(rf"(?<![A-Z0-9ÉÈÊÀÂÙÛÎÏÔÇ]){re.escape(tok)}(?![A-Z0-9ÉÈÊÀÂÙÛÎÏÔÇ])", detail):
+            return True
+    return False
+
+
+def _build_proposition_period_slots(periods: list[EvaluationPeriod]) -> list[PropositionPeriodSlot]:
+    """Construit les colonnes des périodes (garantit au minimum les 3 trimestres du primaire)."""
+    default_trimester_headers = ["Moy. 1er T", "Moy. 2e T", "Moy. 3e T"]
+    slots: list[PropositionPeriodSlot] = []
+
+    if len(periods) <= 3:
+        for idx in range(3):
+            p = periods[idx] if idx < len(periods) else None
+            header = default_trimester_headers[idx]
+            slots.append(PropositionPeriodSlot(slot_index=idx + 1, header_label=header, period=p))
+    else:
+        for idx, p in enumerate(periods, start=1):
+            code = (p.short_code or p.name).strip()
+            slots.append(PropositionPeriodSlot(slot_index=idx, header_label=f"Moy. {code}", period=p))
+
+    return slots
+
+
+def compute_end_of_year_proposition_report(
+    academic_class: AcademicClass,
+    periods: list[EvaluationPeriod] | None = None,
+    annual_results: AnnualClassResults | None = None,
+) -> EndOfYearPropositionReport:
+    """Génère automatiquement la Fiche « PROPOSITION DE FIN D'ANNÉE » d'une classe.
+
+    Respecte strictement les règles pédagogiques existantes :
+    - Réutilise `compute_annual_class_results` (moyennes périodiques, moyenne générale annuelle
+      simple sur les 3 trimestres par défaut ou pondérée si configurée, gestion des ex æquo).
+    - Trie les élèves actifs par ordre décroissant de moyenne générale annuelle, suivis des
+      dossiers incomplets par ordre alphabétique.
+    - N'attribue aucun rang aux élèves dont la moyenne annuelle n'est pas calculable et affiche
+      « Non déterminé » au lieu de formuler automatiquement une proposition.
+    - Affiche toutes les moyennes avec 2 chiffres après la virgule.
+    """
+    ann_res = annual_results or compute_annual_class_results(academic_class, periods)
+    rounding_mode = ann_res.rounding_mode
+    pass_threshold = ann_res.general_scale / Decimal("2")
+    period_slots = _build_proposition_period_slots(ann_res.periods)
+
+    # Élèves classables triés par moyenne annuelle décroissante + incomplets triés alphabétiquement
+    unranked_sorted = sorted(
+        ann_res.unranked_active_rows,
+        key=lambda r: (
+            r.enrollment.student.last_name.upper(),
+            r.enrollment.student.first_names.upper(),
+            r.enrollment.id,
+        ),
+    )
+    ordered_computed = list(ann_res.ranked_rows) + unranked_sorted
+
+    default_schooling = (academic_class.level_label or academic_class.name).strip()
+    rows: list[StudentPropositionRow] = []
+    passe_count = 0
+    redouble_count = 0
+    undetermined_count = 0
+
+    for order_idx, comp in enumerate(ordered_computed, start=1):
+        enr = comp.enrollment
+        st = enr.student
+        age_val = comp.age
+        age_disp = f"{age_val} an" if age_val <= 1 else f"{age_val} ans"
+        schooling = (enr.schooling_status or "").strip() or default_schooling
+        repeated_flag = "Oui" if _has_repeated_current_class(enr, academic_class) else "Non"
+
+        slot_vals: list[str] = []
+        for slot in period_slots:
+            if slot.period is None:
+                slot_vals.append("—")
+            else:
+                p_val = comp.period_averages.get(slot.period.id)
+                slot_vals.append(
+                    format_decimal_fr(p_val, 2, rounding_mode) if p_val is not None else "—"
+                )
+
+        if comp.is_rankable and comp.rounded_annual_average is not None:
+            disp_ann = format_decimal_fr(comp.rounded_annual_average, 2, rounding_mode)
+            disp_rk = comp.rank_label
+            if comp.rounded_annual_average >= pass_threshold:
+                prop = PROPOSITION_PASSE
+                passe_count += 1
+            else:
+                prop = PROPOSITION_REDOUBLE
+                redouble_count += 1
+        else:
+            disp_ann = "—"
+            disp_rk = "—"
+            prop = PROPOSITION_NON_DETERMINE
+            undetermined_count += 1
+
+        rows.append(
+            StudentPropositionRow(
+                order_number=order_idx,
+                enrollment=enr,
+                annual_computed=comp,
+                full_name=st.full_name,
+                age=age_val,
+                age_display=age_disp,
+                sex=st.sex,
+                schooling_display=schooling,
+                repeated_current_class=repeated_flag,
+                slot_displays=slot_vals,
+                display_annual_average_2dec=disp_ann,
+                display_rank=disp_rk,
+                auto_proposition=prop,
+                validated_decision=(enr.annual_decision or "").strip(),
+            )
+        )
+
+    girls_count = sum(1 for r in rows if r.sex == "F")
+    boys_count = sum(1 for r in rows if r.sex == "M")
+
+    return EndOfYearPropositionReport(
+        academic_class=academic_class,
+        annual_results=ann_res,
+        period_slots=period_slots,
+        rows=rows,
+        pass_threshold=pass_threshold,
+        total_students=len(rows),
+        girls_count=girls_count,
+        boys_count=boys_count,
+        passe_count=passe_count,
+        redouble_count=redouble_count,
+        undetermined_count=undetermined_count,
+    )
+
+

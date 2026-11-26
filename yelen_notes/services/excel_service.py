@@ -11,7 +11,10 @@ from openpyxl.utils import get_column_letter
 
 from yelen_notes.models import AcademicClass, ClassEnrollment, EstablishmentSettings, Student
 from yelen_notes.services.calculation_service import (
+    PROPOSITION_PASSE,
+    PROPOSITION_REDOUBLE,
     AnnualClassResults,
+    EndOfYearPropositionReport,
     PeriodClassResults,
     SynopticPeriodReport,
     format_compact_decimal_fr,
@@ -614,6 +617,103 @@ def export_synoptic_period_to_excel(
             synoptic.overall_girls,
             synoptic.overall_total,
         )
+
+    _auto_fit_columns(ws)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def export_end_of_year_proposition_to_excel(
+    settings: EstablishmentSettings,
+    proposition: EndOfYearPropositionReport,
+) -> bytes:
+    """Exporte la fiche « PROPOSITION DE FIN D'ANNÉE » au format Excel (.xlsx)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Proposition fin d'année"
+
+    ac = proposition.academic_class
+    ann = proposition.annual_results
+    school_label = settings.school_name or "Établissement scolaire"
+    total_cols = 9 + len(proposition.period_slots)
+    last_col_letter = get_column_letter(total_cols)
+
+    ws.append([f"{school_label} — Année scolaire : {ac.school_year.label}"])
+    ws.append(["PROPOSITION DE FIN D'ANNÉE"])
+    ws.append(
+        [
+            f"Classe : {ac.name} — Effectif total : {proposition.total_students} "
+            f"({proposition.girls_count} F / {proposition.boys_count} G) — "
+            f"Passe : {proposition.passe_count} | Redouble : {proposition.redouble_count} | "
+            f"Non déterminé : {proposition.undetermined_count}"
+        ]
+    )
+    ws.merge_cells(f"A1:{last_col_letter}1")
+    ws.merge_cells(f"A2:{last_col_letter}2")
+    ws.merge_cells(f"A3:{last_col_letter}3")
+    ws["A1"].font = BOLD_FONT
+    ws["A2"].font = Font(name="Calibri", size=13, bold=True)
+    ws["A3"].font = BODY_FONT
+
+    headers = [
+        "N° d'ordre",
+        "Nom et prénom(s)",
+        "Âge",
+        "Sexe",
+        "Scolarité",
+        "Classe redoublée",
+    ]
+    for slot in proposition.period_slots:
+        headers.append(slot.header_label)
+    headers.extend(
+        [
+            f"Moyenne générale annuelle /{format_compact_decimal_fr(ann.general_scale)}",
+            "Rang annuel",
+            "Proposition",
+        ]
+    )
+
+    ws.append(headers)
+    hr = ws.max_row
+    for c_idx in range(1, total_cols + 1):
+        c = ws.cell(row=hr, column=c_idx)
+        c.fill = HEADER_FILL
+        c.font = HEADER_FONT
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = CELL_BORDER
+
+    pass_fill = PatternFill(start_color="ECFDF5", end_color="ECFDF5", fill_type="solid")
+    fail_fill = PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid")
+    pass_font = Font(name="Calibri", size=10, bold=True, color="065F46")
+    fail_font = Font(name="Calibri", size=10, bold=True, color="991B1B")
+
+    for row in proposition.rows:
+        vals = [
+            row.order_number,
+            row.full_name,
+            row.age_display,
+            row.sex,
+            row.schooling_display,
+            row.repeated_current_class,
+        ]
+        vals.extend(row.slot_displays)
+        vals.extend([row.display_annual_average_2dec, row.display_rank, row.auto_proposition])
+        ws.append(vals)
+        r = ws.max_row
+        for c_idx in range(1, total_cols + 1):
+            cell = ws.cell(row=r, column=c_idx)
+            cell.border = CELL_BORDER
+            cell.font = BOLD_FONT if c_idx in (total_cols - 2, total_cols - 1) else BODY_FONT
+            if c_idx != 2:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+        prop_cell = ws.cell(row=r, column=total_cols)
+        if row.auto_proposition == PROPOSITION_PASSE:
+            prop_cell.fill = pass_fill
+            prop_cell.font = pass_font
+        elif row.auto_proposition == PROPOSITION_REDOUBLE:
+            prop_cell.fill = fail_fill
+            prop_cell.font = fail_font
 
     _auto_fit_columns(ws)
     buf = io.BytesIO()

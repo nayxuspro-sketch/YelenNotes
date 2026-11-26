@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Proposition de fin d'année{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Proposition de fin d'année</h1>
+        <small class="text-muted">Synthèse annuelle par élève, classement et proposition automatique de passage ou de redoublement</small>
+    </div>
+
+    {% if proposition %}
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('reports.end_of_year_proposition', year_id=selected_year.id if selected_year else None, class_id=selected_class.id) }}"
+           class="btn btn-sm btn-outline-secondary" title="Recalculer en temps réel après modification des notes">
+            Actualiser
+        </a>
+        <form method="post" action="{{ url_for('reports.archive_proposition_trace') }}" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="class_id" value="{{ selected_class.id }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Conserver une trace horodatée des résultats utilisés">
+                Conserver une trace
+            </button>
+        </form>
+        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">
+            Imprimer
+        </button>
+        <a href="{{ url_for('reports.end_of_year_proposition_pdf', class_id=selected_class.id, inline=1) }}"
+           target="_blank" class="btn btn-sm btn-outline-primary">
+            Aperçu PDF (Paysage)
+        </a>
+        <a href="{{ url_for('reports.end_of_year_proposition_pdf', class_id=selected_class.id) }}"
+           class="btn btn-sm btn-primary">
+            Exporter PDF
+        </a>
+        <a href="{{ url_for('reports.end_of_year_proposition_excel', class_id=selected_class.id) }}"
+           class="btn btn-sm btn-outline-success">
+            Exporter Excel (.xlsx)
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+{# Paramètres de génération : Année scolaire & Classe (§2 & §6.1) #}
+<div class="card mb-3 no-print">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for('reports.end_of_year_proposition') }}" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">Année scolaire</label>
+                <select name="year_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for yr in all_years %}
+                    <option value="{{ yr.id }}" {% if selected_year and yr.id == selected_year.id %}selected{% endif %}>
+                        {{ yr.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small fw-semibold mb-1">Classe concernée</label>
+                <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for cls in classes %}
+                    <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>
+                        Classe {{ cls.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 text-md-end small text-muted">
+                {% if proposition %}
+                Seuil de réussite : <strong>{{ proposition.pass_threshold | dec_fr(2) }} /{{ proposition.annual_results.general_scale | compact_fr }}</strong>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if proposition %}
+{% set ac = proposition.academic_class %}
+{% set ann = proposition.annual_results %}
+
+<div class="yn-synoptic-sheet mb-4">
+    {# EN-TÊTE ADMINISTRATIF OFFICIEL (§5) #}
+    <div class="row align-items-center pb-2 mb-3 border-bottom border-dark border-2">
+        <div class="col-5 text-center small">
+            <div class="fw-bold text-uppercase">{{ settings.country or 'Burkina Faso' }}</div>
+            <div>———</div>
+            {% if settings.motto %}<div class="fst-italic">{{ settings.motto }}</div>{% endif %}
+            {% if settings.ceb %}<div class="mt-1">CEB : <strong>{{ settings.ceb }}</strong></div>{% endif %}
+        </div>
+        <div class="col-2 text-center">
+            {% if has_logo %}
+            <img src="{{ url_for('settings.school_logo') }}" alt="Logo de l'établissement"
+                 style="max-height: 68px; max-width: 100%; object-fit: contain;">
+            {% endif %}
+        </div>
+        <div class="col-5 text-center small">
+            <div class="fw-bold fs-6">{{ settings.school_name or 'Établissement scolaire' }}</div>
+            {% if settings.locality or settings.address %}
+            <div>{{ [settings.locality, settings.address] | select | join(' — ') }}</div>
+            {% endif %}
+            {% if settings.phone %}<div>Tél. : {{ settings.phone }}</div>{% endif %}
+            <div class="mt-1">Année scolaire : <strong>{{ ac.school_year.label }}</strong></div>
+        </div>
+    </div>
+
+    <div class="text-center mb-3">
+        <h2 class="h5 fw-bold text-uppercase mb-1">PROPOSITION DE FIN D'ANNÉE</h2>
+        <div class="small">
+            Classe concernée : <strong>{{ ac.name }}</strong> &nbsp;•&nbsp;
+            Effectif total de la classe : <strong>{{ proposition.total_students }}</strong>
+            ({{ proposition.girls_count }} Filles / {{ proposition.boys_count }} Garçons) &nbsp;•&nbsp;
+            Seuil de réussite : <strong>{{ proposition.pass_threshold | dec_fr(2) }} /{{ ann.general_scale | compact_fr }}</strong>
+        </div>
+        <div class="small text-muted mt-1">
+            Récapitulatif des propositions :
+            <strong class="text-success">{{ proposition.passe_count }} Passe</strong> &nbsp;|&nbsp;
+            <strong class="text-danger">{{ proposition.redouble_count }} Redouble</strong> &nbsp;|&nbsp;
+            <strong class="text-secondary">{{ proposition.undetermined_count }} Non déterminé</strong>
+        </div>
+    </div>
+
+    {# CORPS DU DOCUMENT : TABLEAU UNIQUE DANS L'ORDRE EXACT (§3) #}
+    <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle mb-3">
+            <thead class="table-light text-center align-middle">
+                <tr>
+                    <th style="width: 65px;">N° d'ordre</th>
+                    <th class="text-start" style="min-width: 195px;">Nom et prénom(s)</th>
+                    <th style="width: 68px;">Âge</th>
+                    <th style="width: 52px;">Sexe</th>
+                    <th style="width: 95px;">Scolarité</th>
+                    <th style="width: 95px;">Classe redoublée</th>
+                    {% for slot in proposition.period_slots %}
+                    <th style="width: 82px;">{{ slot.header_label }}</th>
+                    {% endfor %}
+                    <th style="width: 115px;">Moyenne générale annuelle /{{ ann.general_scale | compact_fr }}</th>
+                    <th style="width: 88px;">Rang annuel</th>
+                    <th style="width: 115px;">Proposition</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in proposition.rows %}
+                <tr>
+                    <td class="text-center">{{ row.order_number }}</td>
+                    <td class="fw-semibold">{{ row.full_name }}</td>
+                    <td class="text-center">{{ row.age_display }}</td>
+                    <td class="text-center">{{ row.sex }}</td>
+                    <td class="text-center">{{ row.schooling_display }}</td>
+                    <td class="text-center">{{ row.repeated_current_class }}</td>
+                    {% for s_val in row.slot_displays %}
+                    <td class="text-center">{{ s_val }}</td>
+                    {% endfor %}
+                    <td class="text-center fw-bold bg-light">{{ row.display_annual_average_2dec }}</td>
+                    <td class="text-center fw-bold bg-light">{{ row.display_rank }}</td>
+                    <td class="text-center {% if row.auto_proposition == 'Passe' %}yn-prop-pass{% elif row.auto_proposition == 'Redouble' %}yn-prop-fail{% else %}yn-prop-undetermined{% endif %}">
+                        {{ row.auto_proposition }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 9 + (proposition.period_slots | length) }}" class="text-center py-4 text-muted">
+                        Aucun élève actif inscrit dans cette classe.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# PIED DE PAGE OFFICIEL (§5) #}
+    <div class="small text-muted fst-italic mb-2">
+        Document généré le {{ generated_at.strftime('%d/%m/%Y à %H:%M') }}.
+        Cette fiche constitue une proposition pédagogique ; les décisions définitives relèvent de l'autorité compétente de l'établissement.
+    </div>
+    <div class="row text-center small mt-3 pt-2 align-items-start">
+        <div class="col-4">
+            <div class="fw-bold">Le / La Titulaire de la classe</div>
+            <div style="height: 56px;"></div>
+            <div>{{ ac.titulaire_name }}</div>
+        </div>
+        <div class="col-4">
+            <div class="yn-stamp-box">
+                <span class="fw-bold">Cachet de l'établissement</span>
+            </div>
+        </div>
+        <div class="col-4">
+            <div>
+                {% if settings.locality %}Fait à {{ settings.locality }}, le {{ generated_at.strftime('%d/%m/%Y') }}{% else %}Édité le {{ generated_at.strftime('%d/%m/%Y') }}{% endif %}
+            </div>
+            <div class="fw-bold">{{ ac.director_title }}</div>
+            <div style="height: 44px;"></div>
+            <div class="fw-bold">{{ ac.director_name }}</div>
+        </div>
+    </div>
+</div>
+
+{# VOLET DE VALIDATION ET MODIFICATION DES DÉCISIONS DÉFINITIVES (§8 Important) #}
+<div class="card mb-3 no-print">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <strong>Validation et modification des décisions définitives de fin d'année</strong>
+            <div class="small text-muted">
+                Les propositions ci-dessus sont calculées automatiquement ; l'autorité compétente peut les ajuster et les valider ici avant édition des bulletins annuels ou passage d'année.
+            </div>
+        </div>
+        {% if can_validate_decisions %}
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{{ url_for('reports.validate_end_of_year_decisions') }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="class_id" value="{{ ac.id }}">
+                <input type="hidden" name="mode_action" value="apply_auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    Appliquer toutes les propositions automatiques
+                </button>
+            </form>
+            <a href="{{ url_for('students.year_transition') }}" class="btn btn-sm btn-outline-dark">
+                Passage d'année / Redoublement →
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if can_validate_decisions and proposition.rows %}
+        <form method="post" action="{{ url_for('reports.validate_end_of_year_decisions') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="class_id" value="{{ ac.id }}">
+            <input type="hidden" name="mode_action" value="save_custom">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">N°</th>
+                            <th>Élève</th>
+                            <th class="text-center">Moyenne annuelle</th>
+                            <th class="text-center">Rang</th>
+                            <th class="text-center">Proposition auto.</th>
+                            <th style="width: 260px;">Décision définitive validée</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in proposition.rows %}
+                        <tr>
+                            <td>{{ row.order_number }}</td>
+                            <td class="fw-semibold">{{ row.full_name }}</td>
+                            <td class="text-center">{{ row.display_annual_average_2dec }}</td>
+                            <td class="text-center">{{ row.display_rank }}</td>
+                            <td class="text-center">
+                                <span class="badge {% if row.auto_proposition == 'Passe' %}text-bg-success{% elif row.auto_proposition == 'Redouble' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">
+                                    {{ row.auto_proposition }}
+                                </span>
+                            </td>
+                            <td>
+                                <input type="text" name="decision_{{ row.enrollment.id }}"
+                                       class="form-control form-control-sm"
+                                       list="decision-suggestions"
+                                       value="{{ row.validated_decision or (row.auto_proposition if row.auto_proposition != 'Non déterminé' else '') }}"
+                                       placeholder="ex. Passe, Redouble, Admis en...">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <datalist id="decision-suggestions">
+                <option value="Passe">
+                <option value="Redouble">
+                <option value="Admis(e) en classe supérieure">
+                <option value="Exclu(e)">
+            </datalist>
+            <div class="text-end">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    Enregistrer et valider les décisions définitives
+                </button>
+            </div>
+        </form>
+        {% else %}
+        <div class="small text-muted">
+            {% if not proposition.rows %}
+            Aucun élève actif dans la classe.
+            {% else %}
+            Seul l'Administrateur ou le Directeur / la Directrice (sur une année non clôturée) peut modifier et valider les décisions définitives.
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# HISTORIQUE DES TRACES CONSERVÉES (§6.7) #}
+{% if trace_logs %}
+<div class="card no-print">
+    <div class="card-header small fw-bold">
+        Traces récentes de génération et de validation (Classe {{ ac.name }})
+    </div>
+    <ul class="list-group list-group-flush small">
+        {% for log in trace_logs %}
+        <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+            <span><strong>{{ log.action }}</strong> — {{ log.summary }}</span>
+            <span class="text-muted">{{ log.created_at.strftime('%d/%m/%Y %H:%M') }} par {{ log.username_snapshot }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    Veuillez configurer au moins une année scolaire et une classe pour afficher la Fiche de proposition de fin d'année.
+</div>
+{% endif %}
+{% endblock %}
