@@ -111,6 +111,7 @@ PERMISSIONS_CATALOG: list[tuple[str, str, str, str, str]] = [
     ("evaluations.view", "evaluations", "Années & Périodes", PERM_VIEW, "Consulter les années scolaires et périodes d'évaluation"),
     ("evaluations.create", "evaluations", "Années & Périodes", PERM_CREATE, "Créer une année scolaire ou une période d'évaluation"),
     ("evaluations.update", "evaluations", "Années & Périodes", PERM_UPDATE, "Modifier les paramètres d'une année ou d'une période"),
+    ("periods.update", "evaluations", "Périodes créées", PERM_UPDATE, "Modifier les périodes d'évaluation créées (intitulé, code, ordre, poids, dates)"),
     ("evaluations.validate", "evaluations", "Clôture périodes", PERM_VALIDATE, "Ouvrir ou clôturer une période ou une année scolaire"),
     ("evaluations.manage", "evaluations", "Réouverture admin", PERM_MANAGE, "Rouvrir exceptionnellement une année scolaire clôturée"),
     # Bulletins & Relevés
@@ -193,7 +194,7 @@ PREDEFINED_ROLES: list[tuple[str, str, bool, str, list[str]]] = [
             "teachers.view", "teachers.manage",
             "subjects.view", "subjects.create", "subjects.update", "subjects.delete", "subjects.manage",
             "grades.view", "grades.create", "grades.update", "grades.validate", "grades.delete",
-            "evaluations.view", "evaluations.create", "evaluations.update", "evaluations.validate",
+            "evaluations.view", "evaluations.create", "evaluations.update", "periods.update", "evaluations.validate",
             "bulletins.view", "bulletins.create", "bulletins.print", "bulletins.export", "bulletins.validate",
             "proposition.view", "proposition.create", "proposition.update", "proposition.validate", "proposition.print", "proposition.export",
             "absences.view", "absences.create", "absences.update", "absences.delete",
@@ -220,7 +221,7 @@ PREDEFINED_ROLES: list[tuple[str, str, bool, str, list[str]]] = [
         ROLE_ENSEIGNANT,
         "Enseignant",
         False,
-        "Accès aux classes affectées, gestion des identités élèves et matières/barèmes de sa classe, saisie des notes en période ouverte et consultation des résultats.",
+        "Accès aux classes affectées, gestion des identités élèves, matières/barèmes et périodes de sa classe, saisie des notes en période ouverte et consultation des résultats.",
         [
             "dashboard.view",
             "students.view", "students.update", "students.export",
@@ -228,7 +229,7 @@ PREDEFINED_ROLES: list[tuple[str, str, bool, str, list[str]]] = [
             "classes.view",
             "subjects.view", "subjects.create", "subjects.update",
             "grades.view", "grades.create", "grades.update", "grades.delete",
-            "evaluations.view",
+            "evaluations.view", "periods.update",
             "bulletins.view", "bulletins.create", "bulletins.print", "bulletins.export",
             "proposition.view", "proposition.create", "proposition.print", "proposition.export",
             "absences.view", "absences.create", "absences.update",
@@ -340,6 +341,7 @@ def ensure_rbac_initialized() -> None:
 
     # 2. Garantir le catalogue des permissions granulaires
     existing_perms = {p.code: p for p in Permission.query.all()}
+    newly_added_perms: set[str] = set()
     for code, module, resource, action, desc in PERMISSIONS_CATALOG:
         if code not in existing_perms:
             perm = Permission(
@@ -352,6 +354,7 @@ def ensure_rbac_initialized() -> None:
             )
             db.session.add(perm)
             existing_perms[code] = perm
+            newly_added_perms.add(code)
             changed = True
     if changed:
         db.session.flush()
@@ -376,6 +379,20 @@ def ensure_rbac_initialized() -> None:
                     db.session.add(RolePermission(role_id=role_obj.id, permission_id=p_obj.id))
             existing_roles[r_code] = role_obj
             changed = True
+        elif newly_added_perms:
+            role_obj = existing_roles[r_code]
+            for p_code in perm_codes:
+                if p_code in newly_added_perms:
+                    p_obj = existing_perms.get(p_code)
+                    if (
+                        p_obj is not None
+                        and RolePermission.query.filter_by(
+                            role_id=role_obj.id, permission_id=p_obj.id
+                        ).first()
+                        is None
+                    ):
+                        db.session.add(RolePermission(role_id=role_obj.id, permission_id=p_obj.id))
+                        changed = True
 
     # 4. Rattacher automatiquement tout compte existant n'ayant pas encore d'entrée UserRole (§13 migration douce)
     if insp.has_table("users") and insp.has_table("rbac_user_roles"):
