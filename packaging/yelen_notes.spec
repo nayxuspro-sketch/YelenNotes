@@ -18,6 +18,7 @@ added_files = [
     (str(ROOT_DIR / "resources"), "resources"),
     (str(ROOT_DIR / "migrations"), "migrations"),
     (str(ROOT_DIR / "config" / "yelen_notes.example.ini"), "config"),
+    (str(ROOT_DIR / "config" / "yelen_publisher_pub.json"), "config"),
     (str(ROOT_DIR / "VERSION.txt"), "."),
     (str(ROOT_DIR / "README.txt"), "."),
 ]

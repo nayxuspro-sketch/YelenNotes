@@ -28,6 +28,12 @@ from yelen_notes.paths import build_runtime_paths, load_ini_config
 from yelen_notes.security import reset_or_create_admin_account
 from yelen_notes.services.backup_service import run_sqlite_integrity_check
 from yelen_notes.services.demo_service import populate_demo_database
+from yelen_notes.services.license_service import (
+    build_client_school_kit_zip,
+    evaluate_runtime_license,
+    get_machine_identity,
+    is_deployment_edition,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -80,6 +86,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Exécute un contrôle complet d'intégrité SQLite (PRAGMA integrity_check) puis quitte.",
     )
+    parser.add_argument(
+        "--show-fingerprint",
+        action="store_true",
+        help="Affiche l'empreinte matérielle unique de cet ordinateur puis quitte.",
+    )
+    parser.add_argument(
+        "--export-client-kit",
+        metavar="FICHIER_ZIP",
+        default=None,
+        help="Exporte une archive ZIP Version Client École (sans clé privée de déploiement Super Admin).",
+    )
     return parser.parse_args(argv)
 
 
@@ -102,6 +119,27 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     app = create_app(runtime_paths=paths, server_mode=mode)
+
+    if args.show_fingerprint:
+        ident = get_machine_identity()
+        print(f"Poste               : {ident.hostname} ({ident.os_label})")
+        print(f"Empreinte matérielle: {ident.fingerprint}")
+        return 0
+
+    if args.export_client_kit:
+        from pathlib import Path
+
+        if not is_deployment_edition(paths):
+            print(
+                "Erreur : seule la Version de Déploiement du Super Admin peut générer un Kit Client École.",
+                file=sys.stderr,
+            )
+            return 1
+        out_path = Path(args.export_client_kit).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(build_client_school_kit_zip(paths, str(app.config["APP_VERSION"])))
+        print(f"Kit Client École généré avec succès : {out_path}")
+        return 0
 
     # Commande de contrôle d'intégrité après arrêt imprévu (§19 test n°12 CdC)
     if args.check_db:
@@ -144,11 +182,14 @@ def main(argv: list[str] | None = None) -> int:
     else:
         host = "0.0.0.0" if mode == "multiposte" else "127.0.0.1"
 
+    lic_startup = evaluate_runtime_license(paths, server_mode=mode)
     local_url = f"http://127.0.0.1:{port}"
     print("=" * 72)
     print(f"  YELEN NOTES v{app.config['APP_VERSION']} — Démarrage du serveur local")
     print("=" * 72)
     print(f"  Mode actif          : {mode.upper()}" + (" [BASE DE DÉMONSTRATION FICTIVE]" if is_demo else ""))
+    print(f"  Empreinte ce poste  : {lic_startup.current_machine_fingerprint}")
+    print(f"  Statut licence      : {lic_startup.status_label}")
     print(f"  Répertoire données  : {paths.data_dir}")
     print(f"  Base SQLite locale  : {paths.db_path}")
     print(f"  Accès sur ce poste  : {local_url}")

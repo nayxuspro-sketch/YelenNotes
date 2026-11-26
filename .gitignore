@@ -23,6 +23,7 @@ instance/
 
 # Configuration locale spécifique à un poste (conserver uniquement .example.ini)
 config/yelen_notes.ini
+config/*.ylic
 
 # Fichiers temporaires système
 .DS_Store

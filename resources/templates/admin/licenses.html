@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
+{% block title %}Licences d'utilisation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
+    <div>
+        <h1 class="yn-page-title mb-1">Gestion des licences & Version de déploiement</h1>
+        <p class="text-muted small mb-0">
+            Module strictement réservé au Super Administrateur — Signature RSA-2048 liée à l'empreinte matérielle unique de chaque ordinateur.
+        </p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if is_deployment_edition %}
+            <span class="badge text-bg-primary px-3 py-2 d-inline-flex align-items-center gap-2">
+                {{ icon('shield-check', 14) }} Version de déploiement Super Admin ({{ pub_key_id }})
+            </span>
+        {% else %}
+            <span class="badge text-bg-secondary px-3 py-2 d-inline-flex align-items-center gap-2">
+                {{ icon('lock', 14) }} Poste Client verrouillé ({{ lic_eval.status_label }})
+            </span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Bandeau KPI Synthétique -->
+<div class="row g-3 mb-4">
+    <div class="col-md-5">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small d-flex align-items-center gap-1 mb-1">
+                    {{ icon('cpu', 14) }} Empreinte matérielle unique de ce poste
+                </div>
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                    <code class="fw-bold fs-6 yn-tabular" id="local-fp-code">{{ lic_eval.current_machine_fingerprint }}</code>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-target="#local-fp-code">
+                        {{ icon('copy', 13) }} Copier
+                    </button>
+                </div>
+                <div class="text-muted mt-1" style="font-size: 0.76rem;">
+                    Hôte : {{ lic_eval.hostname }} · {{ lic_eval.os_label }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small d-flex align-items-center gap-1 mb-1">
+                    {{ icon('cpu', 14) }} Licences Monoposte actives
+                </div>
+                <div class="fs-4 fw-bold yn-tabular">{{ mono_count }}</div>
+                <div class="text-muted" style="font-size: 0.76rem;">1 poste local strict (127.0.0.1)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-4">
+        <div class="card h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small d-flex align-items-center gap-1 mb-1">
+                    {{ icon('network', 14) }} Licences Multiposte Réseau actives
+                </div>
+                <div class="fs-4 fw-bold yn-tabular">{{ multi_count }}</div>
+                <div class="text-muted" style="font-size: 0.76rem;">Serveur principal + postes LAN</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if last_created %}
+<!-- Licence nouvellement émise : téléchargement immédiat -->
+<div class="card border-success mb-4">
+    <div class="card-header bg-success-subtle d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="fw-semibold d-flex align-items-center gap-2">
+            {{ icon('check-circle', 17) }}
+            <span>Nouvelle licence prête : {{ last_created.license_serial }} — {{ LICENSE_TYPE_LABELS.get(last_created.license_type, last_created.license_type) }}</span>
+        </div>
+        <a href="{{ url_for('licensing.download_issued_license', lic_id=last_created.id) }}" class="btn btn-sm btn-success">
+            {{ icon('download', 14) }} Télécharger le fichier .ylic
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 small mb-2">
+            <div class="col-md-4"><strong>Établissement :</strong> {{ last_created.beneficiary_name }}</div>
+            <div class="col-md-5"><strong>Empreinte liée :</strong> <code class="yn-tabular">{{ last_created.machine_fingerprint }}</code></div>
+            <div class="col-md-3"><strong>Validité :</strong> {{ last_created.expires_at | date_fr if last_created.expires_at else 'Perpétuelle' }}</div>
+        </div>
+        <div class="input-group input-group-sm">
+            <input type="text" id="last-license-token" class="form-control font-monospace" value="{{ last_created.license_token }}" readonly>
+            <button type="button" class="btn btn-outline-secondary" data-copy-input="#last-license-token">
+                {{ icon('copy', 14) }} Copier la clé signée
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+    <!-- Colonne gauche : Émission d'une licence liée à l'empreinte matérielle -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('key-round', 17) }}
+                <span>Générer une licence liée à l'empreinte d'un ordinateur</span>
+            </div>
+            <div class="card-body">
+                {% if is_deployment_edition %}
+                <form method="post" action="{{ url_for('licensing.issue_license') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <!-- 1. Choix du type de licence -->
+                    <label class="form-label fw-semibold">Type de licence d'utilisation</label>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="border rounded p-3 d-block h-100" style="cursor: pointer;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="license_type" id="type_mono" value="{{ LICENSE_MONOPOSTE }}" checked>
+                                    <span class="form-check-label fw-semibold d-flex align-items-center gap-1">
+                                        {{ icon('cpu', 15) }} Licence Monoposte
+                                    </span>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    Utilisation sur 1 seul ordinateur local (<code>127.0.0.1</code>). Bloque le mode multiposte réseau et toute copie vers un autre PC.
+                                </div>
+                            </label>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="border rounded p-3 d-block h-100" style="cursor: pointer;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="license_type" id="type_multi" value="{{ LICENSE_MULTIPOSTE }}">
+                                    <span class="form-check-label fw-semibold d-flex align-items-center gap-1">
+                                        {{ icon('network', 15) }} Licence Multiposte Réseau
+                                    </span>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    Autorise le serveur principal lié à cette empreinte ainsi que la connexion simultanée des postes sur le réseau local (LAN).
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Import rapide d'un fichier .req d'un poste école -->
+                    <div class="mb-3 p-2 border rounded bg-body-tertiary">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <label class="small fw-semibold mb-0" for="req-file-helper">
+                                {{ icon('upload', 14) }} Importer une fiche d'empreinte (<code>.req</code>) issue d'un poste client :
+                            </label>
+                            <input type="file" id="req-file-helper" accept=".req,.json" class="form-control form-control-sm" style="max-width: 280px;">
+                        </div>
+                        <div id="req-file-feedback" class="small text-success mt-1" style="display: none;"></div>
+                    </div>
+
+                    <!-- 2. Empreinte matérielle cible -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label mb-0 fw-semibold" for="machine_fingerprint">Empreinte matérielle unique du poste cible</label>
+                            <button type="button"
+                                    class="btn btn-sm btn-link p-0 text-decoration-none"
+                                    id="fill-local-fp-btn"
+                                    data-fp="{{ lic_eval.current_machine_fingerprint }}">
+                                Utiliser l'empreinte de cet ordinateur
+                            </button>
+                        </div>
+                        <input type="text"
+                               id="machine_fingerprint"
+                               name="machine_fingerprint"
+                               class="form-control font-monospace yn-tabular"
+                               placeholder="YNM-XXXX-XXXX-XXXX-XXXX-XXXX"
+                               required>
+                        <div class="form-text">
+                            La licence signée ne fonctionnera que sur l'ordinateur possédant exactement cette empreinte matérielle.
+                        </div>
+                    </div>
+
+                    <!-- 3. Établissement bénéficiaire & Expiration -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold" for="beneficiary_name">Nom de l'établissement bénéficiaire</label>
+                            <input type="text"
+                                   id="beneficiary_name"
+                                   name="beneficiary_name"
+                                   class="form-control"
+                                   placeholder="ex. Lycée Privé Wend-Panga — Ouagadougou"
+                                   required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" for="expires_at">Expiration (vide = perpétuelle)</label>
+                            <input type="date" id="expires_at" name="expires_at" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="notes">Référence / Notes internes (facultatif)</label>
+                        <input type="text" id="notes" name="notes" class="form-control form-control-sm" placeholder="ex. Contrat annuel n°2026-04 — Poste Direction">
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="install_on_current_pc" name="install_on_current_pc">
+                        <label class="form-check-label small" for="install_on_current_pc">
+                            Installer également cette licence localement sur cet ordinateur (si l'empreinte correspond à ce poste)
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        {{ icon('key-round', 15) }} Signer et générer la licence officielle
+                    </button>
+                </form>
+                {% else %}
+                <div class="alert alert-secondary mb-0">
+                    <div class="fw-semibold mb-1">Édition Client active sur cet ordinateur</div>
+                    <div class="small">
+                        La clé privée de déploiement du Super Admin a été retirée de ce poste afin d'empêcher toute génération locale de licences.
+                        Utilisez votre <strong>Version de déploiement Super Admin</strong> pour émettre de nouvelles licences.
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Colonne droite : Version de déploiement Super Admin & Kit Client École -->
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('shield-check', 17) }}
+                <span>Version de déploiement & Protection anti-copie</span>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                    <p class="small text-muted">
+                        Votre <strong>Version de déploiement Super Admin</strong> embarque l'autorité de signature cryptographique RSA-2048.
+                        Pour installer Yelen Notes dans un établissement sans exposer votre clé maîtresse :
+                    </p>
+                    <ol class="small text-muted ps-3 mb-3">
+                        <li class="mb-1">Exportez ci-dessous le <strong>Kit Client École (.zip)</strong> (ou compilez l'exécutable <code>dist\YELEN-NOTES</code>).</li>
+                        <li class="mb-1">Déployez ce kit sur l'ordinateur de l'école : au lancement, il affiche son empreinte unique <code>YNM-...</code>.</li>
+                        <li class="mb-1">Générez sa licence <strong>Monoposte</strong> ou <strong>Multiposte Réseau</strong> et activez-la avec le fichier <code>.ylic</code>.</li>
+                        <li>Si quelqu'un copie ensuite le dossier vers un autre ordinateur, l'empreinte matérielle diffère et l'application se verrouille immédiatement.</li>
+                    </ol>
+
+                    {% if is_deployment_edition %}
+                    <div class="d-grid gap-2 mb-4">
+                        <a href="{{ url_for('licensing.download_client_kit') }}" class="btn btn-outline-primary">
+                            {{ icon('download', 15) }} Télécharger le Kit Client École (.zip)
+                        </a>
+                    </div>
+
+                    <div class="border-top pt-3 mt-2">
+                        <h3 class="h6 fw-semibold mb-1">Déploiement direct sur ce PC</h3>
+                        <p class="small text-muted mb-2">
+                            Si vous venez d'installer directement votre Version de déploiement sur l'ordinateur d'un client, activez d'abord une licence pour ce poste puis verrouillez-le en Poste Client :
+                        </p>
+                        <form method="post"
+                              action="{{ url_for('licensing.lock_to_client_edition') }}"
+                              onsubmit="return confirm('Confirmer le retrait de la clé de déploiement Super Admin sur cet ordinateur ? Assurez-vous d\\'avoir conservé votre copie maîtresse ailleurs.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-warning w-100">
+                                {{ icon('lock', 14) }} Verrouiller cet ordinateur en Poste Client
+                            </button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="border rounded p-3 bg-body-tertiary small">
+                        <div class="fw-semibold mb-1">Détails de la licence active sur ce poste :</div>
+                        <div><strong>Type :</strong> {{ lic_eval.license_type_label }}</div>
+                        <div><strong>Série :</strong> <code>{{ lic_eval.serial or '—' }}</code></div>
+                        <div><strong>Établissement :</strong> {{ lic_eval.beneficiary_name or '—' }}</div>
+                        <div><strong>Empreinte liée :</strong> <code>{{ lic_eval.licensed_machine_fingerprint or '—' }}</code></div>
+                        <div><strong>Expiration :</strong> {{ lic_eval.expires_at or 'Perpétuelle' }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if is_deployment_edition %}
+                <div class="border-top pt-3 mt-3">
+                    <details>
+                        <summary class="small text-muted" style="cursor: pointer;">Options cryptographiques avancées (Clé maîtresse {{ pub_key_id }})</summary>
+                        <div class="mt-2">
+                            <form method="post"
+                                  action="{{ url_for('licensing.regenerate_keys') }}"
+                                  onsubmit="return confirm('Attention : régénérer la paire de clés RSA-2048 invalidera la vérification avec les anciens Kits Clients. Continuer ?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    Régénérer la paire de clés RSA-2048 de l'éditeur
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Registre des licences émises -->
+<div class="card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
+            {{ icon('file-spreadsheet', 17) }}
+            <span>Registre des licences émises ({{ issued_licenses | length }})</span>
+        </div>
+        <div style="min-width: 250px;">
+            <input type="search"
+                   class="form-control form-control-sm"
+                   placeholder="Filtrer par école, série, empreinte..."
+                   data-yn-table-search="#licenses-registry-table">
+        </div>
+    </div>
+
+    {% if issued_licenses %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="licenses-registry-table" data-yn-sortable>
+            <thead>
+                <tr>
+                    <th>N° Série</th>
+                    <th>Type</th>
+                    <th>Établissement bénéficiaire</th>
+                    <th>Empreinte matérielle liée</th>
+                    <th>Validité</th>
+                    <th>Statut</th>
+                    <th class="text-end" data-no-sort>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in issued_licenses %}
+                <tr>
+                    <td class="font-monospace small fw-semibold yn-tabular">{{ item.license_serial }}</td>
+                    <td>
+                        {% if item.license_type == LICENSE_MULTIPOSTE %}
+                            <span class="badge text-bg-info">{{ icon('network', 12) }} Multiposte Réseau</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">{{ icon('cpu', 12) }} Monoposte</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="fw-semibold">{{ item.beneficiary_name }}</div>
+                        {% if item.notes %}
+                        <div class="text-muted" style="font-size: 0.75rem;">{{ item.notes }}</div>
+                        {% endif %}
+                    </td>
+                    <td><code class="small yn-tabular">{{ item.machine_fingerprint }}</code></td>
+                    <td class="small yn-tabular">
+                        <div>Émise : {{ item.issued_at | date_fr }}</div>
+                        <div class="text-muted">
+                            Exp. : {{ item.expires_at | date_fr if item.expires_at else 'Perpétuelle' }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.is_revoked %}
+                            <span class="badge text-bg-danger">Révoquée</span>
+                        {% elif item.is_expired %}
+                            <span class="badge text-bg-warning">Expirée</span>
+                        {% else %}
+                            <span class="badge text-bg-success">Active</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="d-inline-flex align-items-center gap-1">
+                            <a href="{{ url_for('licensing.download_issued_license', lic_id=item.id) }}"
+                               class="btn btn-sm btn-outline-primary"
+                               title="Télécharger le fichier .ylic">
+                                {{ icon('download', 14) }} .ylic
+                            </a>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-copy-raw="{{ item.license_token }}"
+                                    title="Copier la clé signée YNL1">
+                                {{ icon('copy', 14) }}
+                            </button>
+                            {% if not item.is_revoked %}
+                            <form method="post"
+                                  action="{{ url_for('licensing.revoke_issued_license', lic_id=item.id) }}"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Révoquer la licence {{ item.license_serial }} ?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Révoquer">
+                                    {{ icon('trash-2', 14) }}
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        {{ empty_state(
+            "key-round",
+            "Aucune licence émise pour le moment",
+            "Utilisez le formulaire ci-dessus pour générer une licence Monoposte ou Multiposte Réseau liée à l'empreinte matérielle d'un ordinateur."
+        ) }}
+    {% endif %}
+</div>
+
+<script>
+    (function () {
+        var fillBtn = document.getElementById("fill-local-fp-btn");
+        var fpInput = document.getElementById("machine_fingerprint");
+        if (fillBtn && fpInput) {
+            fillBtn.addEventListener("click", function () {
+                fpInput.value = fillBtn.getAttribute("data-fp") || "";
+                fpInput.focus();
+            });
+        }
+
+        var reqInput = document.getElementById("req-file-helper");
+        var reqFeedback = document.getElementById("req-file-feedback");
+        if (reqInput && fpInput) {
+            reqInput.addEventListener("change", function () {
+                var file = reqInput.files && reqInput.files[0];
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    try {
+                        var data = JSON.parse(String(ev.target.result || "{}"));
+                        if (data.machine_fingerprint) {
+                            fpInput.value = data.machine_fingerprint;
+                        }
+                        if (data.requested_mode === "MULTIPOSTE") {
+                            var rMulti = document.getElementById("type_multi");
+                            if (rMulti) rMulti.checked = true;
+                        } else if (data.requested_mode === "MONOPOSTE") {
+                            var rMono = document.getElementById("type_mono");
+                            if (rMono) rMono.checked = true;
+                        }
+                        if (reqFeedback) {
+                            reqFeedback.style.display = "block";
+                            reqFeedback.textContent = "Empreinte chargée depuis le poste « " + (data.hostname || "client") + " » (" + (data.os_label || "") + ").";
+                        }
+                    } catch (err) {
+                        if (reqFeedback) {
+                            reqFeedback.style.display = "block";
+                            reqFeedback.textContent = "Fichier .req invalide.";
+                        }
+                    }
+                };
+                reader.readAsText(file, "utf-8");
+            });
+        }
+
+        function copyText(val, btn) {
+            if (!val) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(val);
+            }
+            var orig = btn.innerHTML;
+            btn.textContent = "Copié";
+            setTimeout(function () { btn.innerHTML = orig; }, 1400);
+        }
+
+        document.querySelectorAll("[data-copy-target]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var el = document.querySelector(btn.getAttribute("data-copy-target"));
+                if (el) copyText(el.textContent.trim(), btn);
+            });
+        });
+
+        document.querySelectorAll("[data-copy-input]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var el = document.querySelector(btn.getAttribute("data-copy-input"));
+                if (el) copyText(el.value, btn);
+            });
+        });
+
+        document.querySelectorAll("[data-copy-raw]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                copyText(btn.getAttribute("data-copy-raw"), btn);
+            });
+        });
+    })();
+</script>
+{% endblock %}

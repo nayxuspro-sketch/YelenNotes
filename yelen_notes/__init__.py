@@ -8,7 +8,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from flask_migrate import upgrade as alembic_upgrade
 from flask_wtf.csrf import CSRFError
 from sqlalchemy import inspect
@@ -33,15 +33,18 @@ from yelen_notes.security import (
     enforce_session_security,
     ensure_rbac_initialized,
     get_accessible_years_query,
+    get_client_ip,
     get_current_establishment_id,
     get_user_accessible_establishment_ids,
     has_any_permission,
     has_permission,
     is_ajax_or_json_request,
     is_strictly_scoped_parent,
+    is_super_admin,
 )
 from yelen_notes.services.backup_service import create_safe_backup, maybe_trigger_automatic_backup
 from yelen_notes.services.calculation_service import format_compact_decimal_fr, format_decimal_fr
+from yelen_notes.services.license_service import evaluate_runtime_license, is_deployment_edition
 
 
 def _configure_logging(app: Flask, paths: RuntimePaths) -> None:
@@ -151,11 +154,39 @@ def create_app(
 
     @app.before_request
     def _before_every_request():
+        ep = request.endpoint or ""
+        if not ep.startswith("static") and ep not in (
+            "health_check",
+            "licensing.activation_screen",
+            "licensing.activate_submit",
+            "licensing.download_machine_request",
+        ):
+            lic_eval = evaluate_runtime_license(
+                paths,
+                server_mode=str(app.config.get("SERVER_MODE", "monoposte")),
+                remote_addr=get_client_ip(),
+                force_client=bool(app.config.get("FORCE_CLIENT_EDITION", False)),
+                fingerprint_override=app.config.get("TEST_MACHINE_FINGERPRINT_OVERRIDE"),
+            )
+            if not lic_eval.allowed:
+                if is_ajax_or_json_request():
+                    return (
+                        jsonify(
+                            {
+                                "ok": False,
+                                "error": lic_eval.reason,
+                                "license_status": lic_eval.status_code,
+                            }
+                        ),
+                        403,
+                    )
+                return redirect(url_for("licensing.activation_screen"))
+
         sec_resp = enforce_session_security()
         if sec_resp is not None:
             return sec_resp
         # Sauvegarde automatique périodique non bloquante sur requêtes GET authentifiées
-        if request.method == "GET" and not (request.endpoint or "").startswith("static"):
+        if request.method == "GET" and not ep.startswith("static"):
             try:
                 maybe_trigger_automatic_backup(paths, app.config["APP_VERSION"])
             except Exception as exc:
@@ -253,6 +284,10 @@ def create_app(
             "can_perm": _can_perm,
             "has_any_perm": _has_any_perm,
             "is_parent_only": (is_strictly_scoped_parent(_cu) if getattr(_cu, "is_authenticated", False) else False),
+            "is_super_admin_user": (is_super_admin(_cu) if getattr(_cu, "is_authenticated", False) else False),
+            "is_deployment_edition": is_deployment_edition(
+                paths, force_client=bool(app.config.get("FORCE_CLIENT_EDITION", False))
+            ),
             "ROLE_ADMIN": ROLE_ADMIN,
             "ROLE_DIRECTEUR": ROLE_DIRECTEUR,
             "ROLE_ENSEIGNANT": ROLE_ENSEIGNANT,

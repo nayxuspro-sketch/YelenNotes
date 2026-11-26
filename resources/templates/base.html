@@ -214,8 +214,8 @@
                 {% endif %}
 
                 <!-- 9. Administration et sécurité -->
-                {% if has_any_perm('rbac.view', 'users.view', 'settings.update', 'settings.manage', 'audit.view') %}
-                {% set grp_sec_open = ep.startswith('rbac_admin.') or ep.startswith('admin.') %}
+                {% if is_super_admin_user or has_any_perm('rbac.view', 'users.view', 'settings.update', 'settings.manage', 'audit.view') %}
+                {% set grp_sec_open = ep.startswith('rbac_admin.') or ep.startswith('admin.') or ep.startswith('licensing.') %}
                 <div class="yn-nav-category">Gouvernance & Système</div>
                 <div class="yn-nav-item yn-nav-group {% if grp_sec_open %}is-open has-active{% endif %}">
                     <button type="button" class="yn-nav-group-btn" title="Administration et sécurité">
@@ -224,6 +224,9 @@
                         <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
                     </button>
                     <div class="yn-nav-submenu">
+                        {% if is_super_admin_user %}
+                        <a href="{{ url_for('licensing.manage_licenses') }}" class="yn-nav-sublink {% if ep.startswith('licensing.') %}active{% endif %}">Licences d'utilisation</a>
+                        {% endif %}
                         {% if can_perm('rbac.view') %}
                         <a href="{{ url_for('rbac_admin.index') }}" class="yn-nav-sublink {% if ep.startswith('rbac_admin.') %}active{% endif %}">Rôles & Permissions</a>
                         {% endif %}
@@ -297,6 +300,13 @@
                 </div>
 
                 <div class="yn-topbar-right">
+                    {% if is_super_admin_user and is_deployment_edition %}
+                    <a href="{{ url_for('licensing.manage_licenses') }}"
+                       class="badge text-bg-primary text-decoration-none d-none d-xl-inline-flex align-items-center gap-1"
+                       title="Version de déploiement Super Admin active">
+                        {{ icon('key-round', 12) }} Version de déploiement
+                    </a>
+                    {% endif %}
                     <!-- Sélecteur multi-établissements (si autorisé sur plusieurs) -->
                     {% if nav_establishments and (nav_establishments | length) > 1 %}
                     <form method="post" action="{{ url_for('rbac_admin.switch_establishment') }}" class="m-0">

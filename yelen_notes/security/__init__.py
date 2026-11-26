@@ -511,7 +511,15 @@ def enforce_session_security() -> Any:
     """Vérifie l'expiration d'inactivité, la désactivation et la suspension temporaire à chaque requête."""
     if request.endpoint and (
         request.endpoint.startswith("static")
-        or request.endpoint in ("auth.login", "auth.bootstrap_admin", "health_check")
+        or request.endpoint
+        in (
+            "auth.login",
+            "auth.bootstrap_admin",
+            "health_check",
+            "licensing.activation_screen",
+            "licensing.activate_submit",
+            "licensing.download_machine_request",
+        )
     ):
         return None
 
