@@ -751,6 +751,9 @@ class AnnualSubjectSummary:
     appreciation: str
 
 
+MENTION_BULLETIN_PASSE = "Passe en classe supérieure"
+
+
 @dataclass
 class StudentAnnualComputed:
     enrollment: ClassEnrollment
@@ -772,6 +775,7 @@ class StudentAnnualComputed:
     teacher_observation: str = ""
     director_observation: str = ""
     honors_mention: str = ""
+    annual_decision_mention: str = ""
 
 
 @dataclass
@@ -961,6 +965,12 @@ def compute_annual_class_results(
             if rounded_annual is not None
             else ""
         )
+        pass_threshold = general_scale / Decimal("2")
+        annual_decision_mention = (
+            MENTION_BULLETIN_PASSE
+            if (rounded_annual is not None and rounded_annual >= pass_threshold)
+            else ""
+        )
         obs = annual_obs_map.get(enrollment.id)
 
         annual_row = StudentAnnualComputed(
@@ -981,6 +991,7 @@ def compute_annual_class_results(
             teacher_observation=(obs.teacher_observation or "") if obs else "",
             director_observation=(obs.director_observation or "") if obs else "",
             honors_mention=(obs.honors_mention or "") if obs else "",
+            annual_decision_mention=annual_decision_mention,
         )
         all_rows_by_enrollment[enrollment.id] = annual_row
         if enrollment.is_active:

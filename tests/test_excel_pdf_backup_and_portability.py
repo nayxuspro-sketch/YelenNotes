@@ -288,3 +288,122 @@ def test_offline_assets_have_zero_external_cdn_links():
         content = html_file.read_text(encoding="utf-8").lower()
         for marker in forbidden_markers:
             assert marker not in content, f"Lien distant interdit '{marker}' trouvé dans {html_file}"
+
+
+def test_annual_bulletin_decision_mention_and_blank_below_average(app, client, configured_school):
+    """Bulletin de fin d'année : afficher « Passe en classe supérieure » si MOYENNE ANNUELLE >= la moyenne,
+    et laisser un vide en face de DÉCISION DE FIN D'ANNÉE si MOYENNE ANNUELLE < la moyenne."""
+    from tests.conftest import extract_csrf_token
+    from yelen_notes.services.pdf_service import (
+        _build_single_annual_bulletin_flowables,
+        _build_styles,
+        ensure_pdf_fonts,
+    )
+    from yelen_notes.services.student_service import create_and_enroll_student
+
+    with app.app_context():
+        paths = app.config["RUNTIME_PATHS"]
+        settings = EstablishmentSettings.get_singleton()
+        cm2 = db.session.get(AcademicClass, configured_school["cm2_id"])
+        t1 = db.session.get(EvaluationPeriod, configured_school["t1_id"])
+        t2 = db.session.get(EvaluationPeriod, configured_school["t2_id"])
+        admin = db.session.get(User, configured_school["admin_id"])
+        subjects = [
+            db.session.get(Subject, configured_school["s_lec_id"]),   # /10 coef 1
+            db.session.get(Subject, configured_school["s_calc_id"]),  # /20 ramené sur /10 coef 2
+            db.session.get(Subject, configured_school["s_sport_id"]), # /10 coef 1
+        ]
+
+        # Élève 1 : exactement la moyenne (5,00 / 10)
+        enr_exact = create_and_enroll_student(
+            academic_class=cm2, last_name="OUÉDRAOGO", first_names="Aïcha", sex="F", birth_date=date(2015, 2, 10)
+        )
+        # Élève 2 : au-dessus de la moyenne (7,50 / 10)
+        enr_above = create_and_enroll_student(
+            academic_class=cm2, last_name="SAWADOGO", first_names="Issa", sex="M", birth_date=date(2015, 5, 14)
+        )
+        # Élève 3 : en dessous de la moyenne (4,00 / 10), même si annual_decision contenait une autre valeur
+        enr_below = create_and_enroll_student(
+            academic_class=cm2, last_name="TRAORÉ", first_names="Salif", sex="M", birth_date=date(2015, 9, 20)
+        )
+        enr_below.annual_decision = "Redouble"
+        db.session.commit()
+
+        for p in (t1, t2):
+            for s, v in zip(subjects, ["5", "10", "5"]):
+                upsert_single_grade(enrollment=enr_exact, period=p, subject=s, raw_input=v, actor=admin)
+            for s, v in zip(subjects, ["7.5", "15", "7.5"]):
+                upsert_single_grade(enrollment=enr_above, period=p, subject=s, raw_input=v, actor=admin)
+            for s, v in zip(subjects, ["4", "8", "4"]):
+                upsert_single_grade(enrollment=enr_below, period=p, subject=s, raw_input=v, actor=admin)
+
+        ann_res = compute_annual_class_results(cm2)
+        row_exact = ann_res.all_rows_by_enrollment[enr_exact.id]
+        row_above = ann_res.all_rows_by_enrollment[enr_above.id]
+        row_below = ann_res.all_rows_by_enrollment[enr_below.id]
+
+        assert str(row_exact.rounded_annual_average) == "5.00"
+        assert row_exact.annual_decision_mention == "Passe en classe supérieure"
+        assert str(row_above.rounded_annual_average) == "7.50"
+        assert row_above.annual_decision_mention == "Passe en classe supérieure"
+        assert str(row_below.rounded_annual_average) == "4.00"
+        assert row_below.annual_decision_mention == ""
+
+        # Vérification exacte du bloc PDF du Bulletin de fin d'année
+        f_reg, f_bold = ensure_pdf_fonts(paths.fonts_dir)
+        styles = _build_styles(f_reg, f_bold)
+
+        flow_exact = _build_single_annual_bulletin_flowables(settings, paths, ann_res, row_exact, styles, 500.0)
+        syn_text_exact = " ".join(
+            getattr(cell, "text", "")
+            for f in flow_exact
+            if hasattr(f, "_cellvalues")
+            for r in f._cellvalues
+            for cell in r
+        )
+        assert "<b>DÉCISION DE FIN D'ANNÉE :</b> Passe en classe supérieure" in syn_text_exact
+        assert "À délibérer" not in syn_text_exact
+
+        flow_below = _build_single_annual_bulletin_flowables(settings, paths, ann_res, row_below, styles, 500.0)
+        syn_text_below = " ".join(
+            getattr(cell, "text", "")
+            for f in flow_below
+            if hasattr(f, "_cellvalues")
+            for r in f._cellvalues
+            for cell in r
+        )
+        assert "<b>DÉCISION DE FIN D'ANNÉE :</b> " in syn_text_below
+        assert "Passe en classe supérieure" not in syn_text_below
+        assert "À délibérer" not in syn_text_below
+        assert "Redouble" not in syn_text_below
+
+        pdf_exact = generate_annual_bulletins_pdf(settings, paths, ann_res, enrollment_ids=[enr_exact.id])
+        pdf_below = generate_annual_bulletins_pdf(settings, paths, ann_res, enrollment_ids=[enr_below.id])
+        assert pdf_exact.startswith(b"%PDF-") and len(pdf_exact) > 1500
+        assert pdf_below.startswith(b"%PDF-") and len(pdf_below) > 1500
+
+        cm2_id = cm2.id
+        exact_id = enr_exact.id
+        below_id = enr_below.id
+
+    # Vérification de l'aperçu HTML officiel du Bulletin annuel
+    login_page = client.get("/connexion", follow_redirects=True)
+    tok = extract_csrf_token(login_page.data)
+    client.post(
+        "/connexion",
+        data={"username": "admin", "password": "AdminPass2026!", "csrf_token": tok},
+        follow_redirects=True,
+    )
+
+    html_exact = client.get(
+        f"/resultats/bulletins?class_id={cm2_id}&scope=ANNUEL&preview_id={exact_id}"
+    ).data.decode("utf-8")
+    assert "<strong>DÉCISION DE FIN D'ANNÉE :</strong> Passe en classe supérieure" in html_exact
+
+    html_below = client.get(
+        f"/resultats/bulletins?class_id={cm2_id}&scope=ANNUEL&preview_id={below_id}"
+    ).data.decode("utf-8")
+    assert "<strong>DÉCISION DE FIN D'ANNÉE :</strong>" in html_below
+    assert "Passe en classe supérieure" not in html_below
+    assert "À délibérer" not in html_below
+
