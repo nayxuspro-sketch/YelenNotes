@@ -1,0 +1,169 @@
+{% from "components/ui.html" import icon %}
+<!DOCTYPE html>
+<html lang="fr" data-theme="light" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Activation de la licence — {{ app_name }}</title>
+    <script>
+        (function () {
+            try {
+                var t = window.localStorage.getItem("yn_theme_preference");
+                if (t === "dark" || t === "light") {
+                    document.documentElement.setAttribute("data-theme", t);
+                    document.documentElement.setAttribute("data-bs-theme", t);
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+    <div class="yn-auth-shell py-4">
+        <div class="position-fixed top-0 end-0 p-3 no-print">
+            <button type="button" class="yn-icon-btn" data-yn-theme-toggle aria-label="Changer le thème">
+                <span class="yn-theme-moon">{{ icon('moon', 16) }}</span>
+                <span class="yn-theme-sun" style="display:none;">{{ icon('sun', 16) }}</span>
+            </button>
+        </div>
+
+        <div class="w-100" style="max-width: 680px;">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-3">
+                    {% for category, msg in messages %}
+                    {% set cat = category if category in ('success', 'danger', 'warning', 'info') else 'info' %}
+                    <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 px-3 d-flex align-items-center gap-2" role="alert">
+                        {% if cat == 'success' %}{{ icon('check-circle', 17) }}
+                        {% elif cat == 'danger' %}{{ icon('alert-circle', 17) }}
+                        {% else %}{{ icon('alert-triangle', 17) }}{% endif %}
+                        <div class="flex-grow-1">{{ msg }}</div>
+                        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="card shadow-sm">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="yn-brand-badge">YN</span>
+                        <div>
+                            <div class="fw-bold">{{ app_name }} v{{ app_version }}</div>
+                            <div class="text-muted small">Protection matérielle et contrôle de licence d'utilisation</div>
+                        </div>
+                    </div>
+                    {% if lic_eval.allowed %}
+                        <span class="badge text-bg-success">{{ lic_eval.status_label }}</span>
+                    {% else %}
+                        <span class="badge text-bg-danger">{{ lic_eval.status_label }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="card-body p-4">
+                    {% if lic_eval.allowed %}
+                    <div class="alert alert-success d-flex align-items-start gap-2 mb-4">
+                        {{ icon('check-circle', 18) }}
+                        <div>
+                            <div class="fw-semibold">Ce poste est dûment autorisé.</div>
+                            <div class="small">{{ lic_eval.reason }}</div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">
+                            Accéder à l'application {{ icon('chevron-right', 15) }}
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-danger d-flex align-items-start gap-2 mb-4">
+                        {{ icon('lock', 18) }}
+                        <div>
+                            <div class="fw-semibold mb-1">Accès verrouillé — {{ lic_eval.status_label }}</div>
+                            <div class="small">{{ lic_eval.reason }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Étape 1 : Empreinte matérielle unique de cet ordinateur -->
+                    <div class="border rounded p-3 mb-4">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <span class="small fw-semibold text-uppercase text-muted d-flex align-items-center gap-1">
+                                {{ icon('cpu', 15) }} Empreinte unique de cet ordinateur
+                            </span>
+                            <span class="badge text-bg-secondary">
+                                Mode lancé : {{ 'Multiposte Réseau' if server_mode == 'multiposte' else 'Monoposte local' }}
+                            </span>
+                        </div>
+                        <div class="input-group mb-2">
+                            <input type="text"
+                                   id="current-machine-fp"
+                                   class="form-control fw-bold font-monospace yn-tabular"
+                                   value="{{ lic_eval.current_machine_fingerprint }}"
+                                   readonly>
+                            <button type="button" class="btn btn-outline-secondary" id="copy-fp-btn">
+                                {{ icon('copy', 15) }} Copier l'empreinte
+                            </button>
+                        </div>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small text-muted">
+                            <span>Hôte : <strong>{{ lic_eval.hostname }}</strong> · {{ lic_eval.os_label }}</span>
+                            <a href="{{ url_for('licensing.download_machine_request') }}" class="btn btn-sm btn-outline-primary">
+                                {{ icon('download', 14) }} Télécharger la fiche d'empreinte (.req)
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Étape 2 : Formulaire d'activation par fichier .ylic ou clé signée YNL1 -->
+                    <form method="post" action="{{ url_for('licensing.activate_submit') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <h2 class="h6 fw-semibold d-flex align-items-center gap-2 mb-3">
+                            {{ icon('key-round', 16) }} Installer une licence délivrée par le Super Admin
+                        </h2>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="license_file">Importer un fichier de licence officiel (<code>.ylic</code>)</label>
+                            <input type="file" id="license_file" name="license_file" accept=".ylic,.json,.txt" class="form-control">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="license_key">Ou coller directement la clé de licence signée (<code>YNL1...</code>)</label>
+                            <textarea id="license_key"
+                                      name="license_key"
+                                      rows="3"
+                                      class="form-control font-monospace small"
+                                      placeholder="YNL1.eyJzY2hlbWEiOi..."></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            {{ icon('shield-check', 16) }} Vérifier l'empreinte et activer cet ordinateur
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/design-system.js') }}"></script>
+    <script>
+        (function () {
+            var btn = document.getElementById("copy-fp-btn");
+            var inp = document.getElementById("current-machine-fp");
+            if (btn && inp) {
+                btn.addEventListener("click", function () {
+                    inp.select();
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(inp.value);
+                    } else {
+                        document.execCommand("copy");
+                    }
+                    btn.textContent = "Empreinte copiée";
+                });
+            }
+        })();
+    </script>
+</body>
+</html>

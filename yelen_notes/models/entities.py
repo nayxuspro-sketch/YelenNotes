@@ -1120,3 +1120,35 @@ class BackupRecord(db.Model):
     schema_version = db.Column(String(32), nullable=False)
     created_by_username = db.Column(String(64), nullable=False, default="système")
     notes = db.Column(String(255), nullable=True)
+
+
+LICENSE_MONOPOSTE = "MONOPOSTE"
+LICENSE_MULTIPOSTE = "MULTIPOSTE"
+LICENSE_TYPES = (LICENSE_MONOPOSTE, LICENSE_MULTIPOSTE)
+
+
+class IssuedLicense(db.Model):
+    """Registre central des licences d'utilisation signées par le Super Admin."""
+
+    __tablename__ = "issued_licenses"
+    __table_args__ = (
+        CheckConstraint(
+            "license_type IN ('MONOPOSTE', 'MULTIPOSTE')",
+            name="ck_issued_licenses_type",
+        ),
+    )
+
+    id = db.Column(Integer, primary_key=True)
+    license_serial = db.Column(String(48), nullable=False, unique=True, index=True)
+    license_type = db.Column(String(20), nullable=False, index=True)
+    beneficiary_name = db.Column(String(200), nullable=False)
+    machine_fingerprint = db.Column(String(80), nullable=False, index=True)
+    issued_at = db.Column(DateTime, nullable=False, default=utcnow_naive, index=True)
+    expires_at = db.Column(Date, nullable=True)
+    notes = db.Column(String(255), nullable=True)
+    license_token = db.Column(Text, nullable=False)
+    is_revoked = db.Column(Boolean, nullable=False, default=False)
+    revoked_at = db.Column(DateTime, nullable=True)
+    issued_by_id = db.Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    issued_by = db.relationship("User", foreign_keys=[issued_by_id])

@@ -7,6 +7,7 @@ from yelen_notes.blueprints.admin import admin_bp
 from yelen_notes.blueprints.auth import auth_bp
 from yelen_notes.blueprints.dashboard import dashboard_bp
 from yelen_notes.blueprints.grades import grades_bp
+from yelen_notes.blueprints.licensing import licensing_bp
 from yelen_notes.blueprints.operations import operations_bp
 from yelen_notes.blueprints.rbac_admin import rbac_bp
 from yelen_notes.blueprints.reports import reports_bp
@@ -25,3 +26,4 @@ def register_all_blueprints(app: Flask) -> None:
     app.register_blueprint(admin_bp)
     app.register_blueprint(rbac_bp)
     app.register_blueprint(operations_bp)
+    app.register_blueprint(licensing_bp)
