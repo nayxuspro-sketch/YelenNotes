@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Modifier les identités & informations — {{ academic_class.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+        <h1 class="h4 fw-bold mb-0">Modifier les identités et informations des élèves</h1>
+        <small class="text-muted">
+            Classe <strong>{{ academic_class.name }}</strong> ({{ academic_class.school_year.label }}) •
+            Titulaire : {{ academic_class.titulaire_name }} •
+            Âge de référence au {{ academic_class.school_year.age_reference_date | date_fr }}
+        </small>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if include_inactive %}
+        <a href="{{ url_for('students.students_bulk_edit', class_id=academic_class.id) }}" class="btn btn-sm btn-outline-secondary">
+            Afficher uniquement les élèves actifs
+        </a>
+        {% else %}
+        <a href="{{ url_for('students.students_bulk_edit', class_id=academic_class.id, inactive=1) }}" class="btn btn-sm btn-outline-secondary">
+            Inclure les élèves inactifs
+        </a>
+        {% endif %}
+        <a href="{{ url_for('students.students_list', class_id=academic_class.id) }}" class="btn btn-sm btn-outline-dark">
+            ← Retour à la liste de la classe
+        </a>
+    </div>
+</div>
+
+{% if not enrollments %}
+<div class="alert alert-info">Aucun élève inscrit à afficher pour cette classe.</div>
+{% else %}
+<form method="post" action="{{ url_for('students.students_bulk_edit', class_id=academic_class.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if include_inactive %}
+    <input type="hidden" name="inactive" value="1">
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span><strong>{{ enrollments | length }}</strong> élève(s) affiché(s) — Vérifiez ou corrigez les identités et informations scolaires</span>
+            <button type="submit" class="btn btn-sm btn-primary">
+                Enregistrer toutes les modifications
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 68px;" class="text-center">N°</th>
+                        <th style="min-width: 135px;">Matricule</th>
+                        <th style="min-width: 150px;">Nom *</th>
+                        <th style="min-width: 170px;">Prénoms *</th>
+                        <th style="width: 78px;" class="text-center">Sexe *</th>
+                        <th style="min-width: 145px;">Date naissance *</th>
+                        <th style="width: 68px;" class="text-center">Âge</th>
+                        <th style="min-width: 135px;">Scolarité</th>
+                        <th style="min-width: 150px;">Classe redoublée</th>
+                        <th style="min-width: 160px;">Observations</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ref_date = academic_class.school_year.age_reference_date %}
+                    {% for enr in enrollments %}
+                    {% set s = enr.student %}
+                    <tr class="{% if not enr.is_active %}table-light text-muted{% endif %}">
+                        <td>
+                            <input type="number" name="enr_{{ enr.id }}_roll_number" class="form-control form-control-sm text-center"
+                                   min="1" value="{{ enr.roll_number }}" required>
+                        </td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_unique_code" class="form-control form-control-sm font-monospace"
+                                   value="{{ s.unique_code }}">
+                        </td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_last_name" class="form-control form-control-sm fw-semibold"
+                                   value="{{ s.last_name }}" required>
+                        </td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_first_names" class="form-control form-control-sm"
+                                   value="{{ s.first_names }}" required>
+                        </td>
+                        <td>
+                            <select name="enr_{{ enr.id }}_sex" class="form-select form-select-sm text-center" required>
+                                <option value="F" {% if s.sex == 'F' %}selected{% endif %}>F</option>
+                                <option value="M" {% if s.sex == 'M' %}selected{% endif %}>M</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="date" name="enr_{{ enr.id }}_birth_date" class="form-control form-control-sm"
+                                   value="{{ s.birth_date.isoformat() }}" required>
+                        </td>
+                        <td class="text-center small text-nowrap">{{ s.age_at(ref_date) }} ans</td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_schooling_status" class="form-control form-control-sm"
+                                   value="{{ enr.schooling_status or '' }}" placeholder="ex. 6e année">
+                        </td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_repeated_class_detail" class="form-control form-control-sm"
+                                   value="{{ enr.repeated_class_detail or '' }}" placeholder="ex. CM2 (2025-2026)">
+                        </td>
+                        <td>
+                            <input type="text" name="enr_{{ enr.id }}_observations" class="form-control form-control-sm"
+                                   value="{{ enr.observations or '' }}">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <small class="text-muted">Toutes les modifications sont contrôlées côté serveur et tracées dans le journal d'audit.</small>
+            <button type="submit" class="btn btn-primary">
+                Enregistrer toutes les modifications
+            </button>
+        </div>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

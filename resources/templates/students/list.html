@@ -79,8 +79,9 @@
     </div>
 </div>
 
-{% if can_edit %}
+{% if can_edit or can_edit_students %}
 <div class="d-flex flex-wrap gap-2 mb-3">
+    {% if can_edit %}
     <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAddStudent">
         + Ajouter un élève
     </button>
@@ -90,13 +91,22 @@
     <a href="{{ url_for('students.download_excel_template') }}" class="btn btn-sm btn-outline-secondary">
         Télécharger le modèle Excel
     </a>
+    {% endif %}
+
+    {% if can_edit_students %}
+    <a href="{{ url_for('students.students_bulk_edit', class_id=selected_class.id) }}" class="btn btn-sm btn-outline-primary">
+        Modifier les identités & infos (tableau rapide)
+    </a>
     <form method="post" action="{{ url_for('students.renumber_class', class_id=selected_class.id) }}" class="m-0 ms-auto"
           onsubmit="return confirm('Renuméroter les élèves de 1 à N par ordre alphabétique ?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-sm btn-outline-dark">Renuméroter alphabétiquement</button>
     </form>
+    {% endif %}
 </div>
+{% endif %}
 
+{% if can_edit %}
 <!-- Panneau d'ajout individuel -->
 <div class="collapse mb-3" id="collapseAddStudent">
     <div class="card border-primary">
@@ -194,7 +204,11 @@
                 <tr class="{% if not enr.is_active %}table-light text-muted{% endif %}">
                     <td class="text-center fw-bold">{{ enr.roll_number }}</td>
                     <td><code class="small">{{ enr.student.unique_code }}</code></td>
-                    <td class="fw-semibold">{{ enr.student.full_name }}</td>
+                    <td class="fw-semibold">
+                        <a href="{{ url_for('students.student_detail', enrollment_id=enr.id) }}" class="text-decoration-none text-reset">
+                            {{ enr.student.full_name }}
+                        </a>
+                    </td>
                     <td class="text-center">{{ enr.student.sex }}</td>
                     <td>{{ enr.student.birth_date | date_fr }}</td>
                     <td class="text-center">{{ enr.student.age_at(ref_date) }} ans</td>
@@ -209,7 +223,7 @@
                     </td>
                     <td class="text-end">
                         <a href="{{ url_for('students.student_detail', enrollment_id=enr.id) }}" class="btn btn-sm btn-outline-primary">
-                            Ouvrir
+                            {% if can_edit_students %}Modifier{% else %}Consulter{% endif %}
                         </a>
                     </td>
                 </tr>

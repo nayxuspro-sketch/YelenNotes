@@ -157,6 +157,110 @@ def create_and_enroll_student(
     return enrollment
 
 
+def update_student_and_enrollment(
+    *,
+    enrollment: ClassEnrollment,
+    last_name: str,
+    first_names: str,
+    sex: str,
+    birth_date: date,
+    roll_number: int | None = None,
+    unique_code: str | None = None,
+    schooling_status: str | None = None,
+    repeated_class_detail: str | None = None,
+    observations: str | None = None,
+    commit: bool = True,
+) -> dict[str, dict[str, str]]:
+    """Met à jour l'identité (`Student`) et les informations scolaires (`ClassEnrollment`) d'un élève.
+
+    Retourne le dictionnaire des champs effectivement modifiés (`{"champ": {"old": ..., "new": ...}}`).
+    """
+    ac = enrollment.academic_class
+    student = enrollment.student
+
+    clean_last = normalize_last_name(last_name)
+    clean_first = normalize_first_names(first_names)
+    clean_sex = (sex or "").strip().upper()
+    clean_code = (unique_code or "").strip()[:40] if unique_code is not None else student.unique_code
+    if not clean_code:
+        clean_code = student.unique_code
+
+    if not clean_last or not clean_first:
+        raise StudentValidationError("Le nom et les prénoms de l'élève sont obligatoires.")
+    if clean_sex not in ("M", "F"):
+        raise StudentValidationError("Le sexe de l'élève doit être 'M' ou 'F'.")
+
+    validate_student_birth_date(birth_date, ac.school_year.age_reference_date)
+
+    if clean_code != student.unique_code:
+        existing_code = Student.query.filter(
+            Student.unique_code == clean_code,
+            Student.id != student.id,
+        ).first()
+        if existing_code is not None:
+            raise StudentValidationError(
+                f"Le matricule « {clean_code} » est déjà attribué à l'élève {existing_code.full_name}."
+            )
+
+    duplicate_in_class = (
+        ClassEnrollment.query.join(Student)
+        .filter(
+            ClassEnrollment.class_id == ac.id,
+            ClassEnrollment.id != enrollment.id,
+            Student.last_name == clean_last,
+            db.func.lower(Student.first_names) == clean_first.lower(),
+            Student.birth_date == birth_date,
+        )
+        .first()
+    )
+    if duplicate_in_class is not None:
+        raise StudentValidationError(
+            f"Doublon détecté : l'élève {clean_last} {clean_first} né(e) le "
+            f"{birth_date.strftime('%d/%m/%Y')} figure déjà dans {ac.name} (N° {duplicate_in_class.roll_number})."
+        )
+
+    new_roll = roll_number if (roll_number is not None and roll_number > 0) else enrollment.roll_number
+    new_schooling = (schooling_status or "").strip()[:120] or None
+    new_repeated = (repeated_class_detail or "").strip()[:150] or None
+    new_obs = (observations or "").strip() or None
+
+    changes: dict[str, dict[str, str]] = {}
+
+    def _track(field_label: str, old_val: object, new_val: object) -> None:
+        old_str = "" if old_val is None else str(old_val)
+        new_str = "" if new_val is None else str(new_val)
+        if old_str != new_str:
+            changes[field_label] = {"old": old_str, "new": new_str}
+
+    _track("unique_code", student.unique_code, clean_code)
+    _track("last_name", student.last_name, clean_last)
+    _track("first_names", student.first_names, clean_first)
+    _track("sex", student.sex, clean_sex)
+    _track("birth_date", student.birth_date.isoformat(), birth_date.isoformat())
+    _track("roll_number", enrollment.roll_number, new_roll)
+    _track("schooling_status", enrollment.schooling_status, new_schooling)
+    _track("repeated_class_detail", enrollment.repeated_class_detail, new_repeated)
+    _track("observations", enrollment.observations, new_obs)
+
+    if changes:
+        student.unique_code = clean_code
+        student.last_name = clean_last
+        student.first_names = clean_first
+        student.sex = clean_sex
+        student.birth_date = birth_date
+        student.updated_at = utcnow_naive()
+
+        enrollment.roll_number = new_roll
+        enrollment.schooling_status = new_schooling
+        enrollment.repeated_class_detail = new_repeated
+        enrollment.observations = new_obs
+        enrollment.updated_at = utcnow_naive()
+
+    if commit:
+        db.session.commit()
+    return changes
+
+
 def renumber_class_alphabetically(academic_class: AcademicClass, commit: bool = True) -> int:
     """Renumérote de 1 à N par ordre alphabétique (actifs d'abord, puis inactifs conservés)."""
     enrollments = (
