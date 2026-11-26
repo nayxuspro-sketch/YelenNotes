@@ -32,7 +32,11 @@ from reportlab.platypus import (
 from yelen_notes.models import ANNUAL_WEIGHTED, EstablishmentSettings
 from yelen_notes.paths import RuntimePaths
 from yelen_notes.services.calculation_service import (
+    PROPOSITION_NON_DETERMINE,
+    PROPOSITION_PASSE,
+    PROPOSITION_REDOUBLE,
     AnnualClassResults,
+    EndOfYearPropositionReport,
     PeriodClassResults,
     StudentAnnualComputed,
     StudentPeriodComputed,
@@ -1356,6 +1360,211 @@ def generate_synoptic_period_pdf(
         KeepTogether(
             [
                 Paragraph(f"<i>Fiche générée automatiquement le {now_str}.</i>", styles["small"]),
+                Spacer(1, 2 * mm),
+                footer_tbl,
+            ]
+        )
+    )
+
+    doc.build(story, onFirstPage=_footer_canvas_callback, onLaterPages=_footer_canvas_callback)
+    return buf.getvalue()
+
+
+def generate_end_of_year_proposition_pdf(
+    settings: EstablishmentSettings,
+    paths: RuntimePaths,
+    proposition: EndOfYearPropositionReport,
+) -> bytes:
+    """Génère la fiche « PROPOSITION DE FIN D'ANNÉE » en PDF A4 Paysage multi-pages."""
+    font_reg, font_bold = ensure_pdf_fonts(paths.fonts_dir)
+    styles = _build_styles(font_reg, font_bold)
+
+    page_size = landscape(A4)
+    margin = 10 * mm
+    usable_width = page_size[0] - 2 * margin
+    buf = io.BytesIO()
+
+    ac = proposition.academic_class
+    ann = proposition.annual_results
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=page_size,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=margin,
+        bottomMargin=14 * mm,
+        title=f"Proposition de fin d'année - {ac.name} - {ac.school_year.label}",
+    )
+
+    story: list = []
+    story.extend(
+        _build_official_header(settings, paths, ac.school_year.label, styles, usable_width)
+    )
+    story.append(
+        Paragraph(
+            "PROPOSITION DE FIN D'ANNÉE",
+            styles["doc_title"],
+        )
+    )
+
+    gen_scale_str = format_compact_decimal_fr(ann.general_scale)
+    thresh_str = format_decimal_fr(proposition.pass_threshold, 2, ann.rounding_mode)
+    story.append(
+        Paragraph(
+            f"Classe : <b>{_safe(ac.name)}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Effectif total de la classe : <b>{proposition.total_students}</b> "
+            f"({proposition.girls_count} Filles / {proposition.boys_count} Garçons) &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Seuil de réussite : <b>{thresh_str} /{gen_scale_str}</b> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            f"Synthèse : <b>{proposition.passe_count}</b> Passe • "
+            f"<b>{proposition.redouble_count}</b> Redouble • "
+            f"<b>{proposition.undetermined_count}</b> Non déterminé",
+            styles["subtitle"],
+        )
+    )
+
+    header_cells = [
+        Paragraph("<b>N° d'ordre</b>", styles["cell_bold_center"]),
+        Paragraph("<b>Nom et prénom(s)</b>", styles["cell_bold"]),
+        Paragraph("<b>Âge</b>", styles["cell_bold_center"]),
+        Paragraph("<b>Sexe</b>", styles["cell_bold_center"]),
+        Paragraph("<b>Scolarité</b>", styles["cell_bold_center"]),
+        Paragraph("<b>Classe redoublée</b>", styles["cell_bold_center"]),
+    ]
+    for slot in proposition.period_slots:
+        header_cells.append(Paragraph(f"<b>{_safe(slot.header_label)}</b>", styles["cell_bold_center"]))
+    header_cells.extend(
+        [
+            Paragraph(
+                f"<b>Moyenne générale annuelle /{gen_scale_str}</b>",
+                styles["cell_bold_center"],
+            ),
+            Paragraph("<b>Rang annuel</b>", styles["cell_bold_center"]),
+            Paragraph("<b>Proposition</b>", styles["cell_bold_center"]),
+        ]
+    )
+
+    table_data: list[list] = [header_cells]
+    style_cmds: list[tuple] = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.0, colors.HexColor("#111827")),
+        ("GRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#374151")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+
+    prop_col_idx = 6 + len(proposition.period_slots) + 2
+    rank_col_idx = prop_col_idx - 1
+    avg_col_idx = prop_col_idx - 2
+
+    for row in proposition.rows:
+        r_idx = len(table_data)
+        if row.auto_proposition == PROPOSITION_PASSE:
+            prop_html = f"<font color='#065F46'><b>{_safe(row.auto_proposition)}</b></font>"
+            style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#ECFDF5")))
+        elif row.auto_proposition == PROPOSITION_REDOUBLE:
+            prop_html = f"<font color='#991B1B'><b>{_safe(row.auto_proposition)}</b></font>"
+            style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#FEF2F2")))
+        else:
+            prop_html = f"<font color='#4B5563'><i>{_safe(row.auto_proposition)}</i></font>"
+            style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#F3F4F6")))
+
+        style_cmds.append(("BACKGROUND", (avg_col_idx, r_idx), (rank_col_idx, r_idx), colors.HexColor("#F8FAFC")))
+
+        cells = [
+            Paragraph(str(row.order_number), styles["cell_center"]),
+            Paragraph(f"<b>{_safe(row.full_name)}</b>", styles["cell"]),
+            Paragraph(_safe(row.age_display), styles["cell_center"]),
+            Paragraph(_safe(row.sex), styles["cell_center"]),
+            Paragraph(_safe(row.schooling_display), styles["cell_center"]),
+            Paragraph(_safe(row.repeated_current_class), styles["cell_center"]),
+        ]
+        for s_disp in row.slot_displays:
+            cells.append(Paragraph(_safe(s_disp), styles["cell_center"]))
+        cells.extend(
+            [
+                Paragraph(f"<b>{_safe(row.display_annual_average_2dec)}</b>", styles["cell_bold_center"]),
+                Paragraph(f"<b>{_safe(row.display_rank)}</b>", styles["cell_bold_center"]),
+                Paragraph(prop_html, styles["cell_center"]),
+            ]
+        )
+        table_data.append(cells)
+
+    if not proposition.rows:
+        total_cols = 9 + len(proposition.period_slots)
+        empty_row = [Paragraph("Aucun élève actif inscrit dans cette classe.", styles["cell_center"])] + [
+            "" for _ in range(total_cols - 1)
+        ]
+        table_data.append(empty_row)
+        style_cmds.append(("SPAN", (0, 1), (-1, 1)))
+
+    n_slots = max(1, len(proposition.period_slots))
+    per_slot_w = 19 * mm if n_slots <= 3 else max(14 * mm, (57 * mm) / n_slots)
+    w_ord = 13 * mm
+    w_age = 15 * mm
+    w_sex = 11 * mm
+    w_scol = 24 * mm
+    w_red = 22 * mm
+    w_ann = 25 * mm
+    w_rk = 21 * mm
+    w_prop = 26 * mm
+    fixed_sum = w_ord + w_age + w_sex + w_scol + w_red + (per_slot_w * len(proposition.period_slots)) + w_ann + w_rk + w_prop
+    w_name = max(44 * mm, usable_width - fixed_sum)
+
+    col_widths = (
+        [w_ord, w_name, w_age, w_sex, w_scol, w_red]
+        + [per_slot_w] * len(proposition.period_slots)
+        + [w_ann, w_rk, w_prop]
+    )
+
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+    tbl.setStyle(TableStyle(style_cmds))
+    story.append(tbl)
+
+    story.append(Spacer(1, 5 * mm))
+    now_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    today_str = datetime.now().strftime("%d/%m/%Y")
+    place_line = (
+        f"Fait à {_safe(settings.locality)}, le {today_str}"
+        if settings.locality
+        else f"Édité le {today_str}"
+    )
+
+    sig_titulaire = Paragraph(
+        f"<b>Le / La Titulaire de la classe</b><br/><br/><br/><br/>{_safe(ac.titulaire_name)}",
+        styles["cell_center"],
+    )
+    stamp_box = Paragraph(
+        "<b>Cachet de l'établissement</b><br/><br/><br/><br/>&nbsp;",
+        styles["cell_center"],
+    )
+    sig_director = Paragraph(
+        f"{place_line}<br/><b>{_safe(ac.director_title)}</b><br/><br/><br/><b>{_safe(ac.director_name)}</b>",
+        styles["cell_center"],
+    )
+    footer_tbl = Table(
+        [[sig_titulaire, stamp_box, sig_director]],
+        colWidths=[usable_width * 0.35, usable_width * 0.28, usable_width * 0.37],
+    )
+    footer_tbl.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOX", (1, 0), (1, 0), 0.7, colors.HexColor("#6B7280"), None, (3, 3)),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.append(
+        KeepTogether(
+            [
+                Paragraph(
+                    f"<i>Fiche de proposition générée le {now_str}. Les décisions définitives relèvent de l'autorité compétente de l'établissement.</i>",
+                    styles["small"],
+                ),
                 Spacer(1, 2 * mm),
                 footer_tbl,
             ]
