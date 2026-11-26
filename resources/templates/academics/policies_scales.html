@@ -23,6 +23,11 @@
             </option>
             {% endfor %}
         </select>
+        {% if target_class %}
+        <a href="{{ url_for('academics.class_subjects', class_id=target_class.id) }}" class="btn btn-sm btn-outline-primary">
+            Matières & barèmes ({{ target_class.name }})
+        </a>
+        {% endif %}
     </form>
     {% endif %}
 </div>
@@ -32,6 +37,13 @@
     Veuillez d'abord <a href="{{ url_for('settings.school_years') }}">créer une année scolaire</a>.
 </div>
 {% else %}
+
+{% if using_inherited_policy and target_class %}
+<div class="alert alert-info py-2 small">
+    La classe <strong>{{ target_class.name }}</strong> hérite actuellement du barème général de l'année ({{ selected_year.label }}).
+    {% if can_edit %}Vous pouvez ajuster et enregistrer ci-dessous un barème ou une grille d'appréciations propres à cette classe.{% endif %}
+</div>
+{% endif %}
 
 {% if scale_warnings %}
 <div class="alert alert-warning">
@@ -198,7 +210,7 @@
     {% if can_edit %}
     <div class="mt-3 d-flex justify-content-between">
         <div>
-            {% if target_class and policy %}
+            {% if target_class and has_class_override %}
             <button type="submit" name="action" value="delete_override" class="btn btn-outline-danger"
                     onclick="return confirm('Supprimer la règle spécifique de cette classe et revenir à la règle de l\'année ?');">
                 Supprimer la règle spécifique à {{ target_class.name }}

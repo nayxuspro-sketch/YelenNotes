@@ -14,16 +14,37 @@
             {% endif %}
         </small>
     </div>
-    <a href="{{ url_for('academics.classes_list', year_id=academic_class.school_year_id) }}" class="btn btn-sm btn-outline-secondary">
-        ← Retour aux classes
-    </a>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if accessible_classes and (accessible_classes | length) > 1 %}
+        <select class="form-select form-select-sm" style="width: auto;"
+                onchange="if (this.value) { window.location.href = this.value; }">
+            {% for cls in accessible_classes %}
+            <option value="{{ url_for('academics.class_subjects', class_id=cls.id) }}"
+                    {% if cls.id == academic_class.id %}selected{% endif %}>
+                Classe {{ cls.name }}
+            </option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        <a href="{{ url_for('academics.policies_and_scales', year_id=academic_class.school_year_id, class_id=academic_class.id) }}"
+           class="btn btn-sm btn-outline-primary">
+            Barème général & Appréciations
+        </a>
+        <a href="{{ url_for('grades.grade_entry', class_id=academic_class.id) }}"
+           class="btn btn-sm btn-outline-dark">
+            Saisie des notes →
+        </a>
+        <a href="{{ url_for('academics.classes_list', year_id=academic_class.school_year_id) }}" class="btn btn-sm btn-outline-secondary">
+            ← Classes
+        </a>
+    </div>
 </div>
 
 <div class="row g-4">
     {% if can_edit %}
     <div class="col-lg-4">
-        <div class="card">
-            <div class="card-header">Ajouter une matière</div>
+        <div class="card mb-3">
+            <div class="card-header">Ajouter une matière et son barème</div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('academics.class_subjects', class_id=academic_class.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -78,6 +99,31 @@
                 </form>
             </div>
         </div>
+
+        {% if copyable_classes %}
+        <div class="card">
+            <div class="card-header bg-light small fw-semibold">Copier les matières et barèmes d'une autre classe</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('academics.class_subjects', class_id=academic_class.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="copy_subjects">
+                    <div class="mb-2">
+                        <select name="source_class_id" class="form-select form-select-sm" required>
+                            <option value="">— Choisir une classe source —</option>
+                            {% for src_c in copyable_classes %}
+                            <option value="{{ src_c.id }}">
+                                {{ src_c.name }} ({{ src_c.school_year.label }} — {{ src_c.subjects | length }} matières)
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+                        Copier les matières manquantes
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 

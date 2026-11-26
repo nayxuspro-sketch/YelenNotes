@@ -25,7 +25,7 @@ Lors du tout premier lancement de Yelen Notes sur l'ordinateur de l'école :
 |---|---|
 | **Administrateur** | Accès complet : paramètres, utilisateurs, affectations, sauvegardes, restaurations et journaux de sécurité. |
 | **Directeur / Directrice** | Paramètres pédagogiques, années, périodes (ouverture/clôture), classes, matières, élèves, notes, classements, bulletins PDF et sauvegardes manuelles. |
-| **Enseignant titulaire** | Consultation et **modification des identités et des informations scolaires des élèves** de ses classes affectées (tant que l'année scolaire est ouverte), saisie/modification des notes lorsque la période a le statut **OUVERTE**, saisie des observations et impression des relevés/bulletins de ses classes. |
+| **Enseignant titulaire** | Consultation et **modification des identités et des informations scolaires des élèves**, **ajout et paramétrage des matières, coefficients et barèmes** de ses classes affectées (tant que l'année scolaire est ouverte), saisie/modification des notes lorsque la période a le statut **OUVERTE**, saisie des observations et impression des relevés/bulletins de ses classes. |
 | **Consultation** | Lecture et impression des relevés, classements et bulletins autorisés, sans aucune modification possible. |
 
 ---

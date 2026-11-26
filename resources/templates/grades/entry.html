@@ -16,6 +16,12 @@
             ● Toutes les saisies sont enregistrées
         </span>
         {% endif %}
+        {% if selected_class %}
+        <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}"
+           class="btn btn-sm btn-outline-primary">
+            Matières & barèmes
+        </a>
+        {% endif %}
         {% if selected_class and selected_period %}
         <a href="{{ url_for('grades.grade_history_view', class_id=selected_class.id, period_id=selected_period.id) }}"
            class="btn btn-sm btn-outline-secondary">

@@ -153,6 +153,11 @@ def user_can_edit_class_students(user: User, academic_class: AcademicClass | Non
     return False
 
 
+def user_can_manage_class_subjects(user: User, academic_class: AcademicClass | None) -> bool:
+    """Vérifie si l'utilisateur peut ajouter et modifier les matières et barèmes de la classe."""
+    return user_can_edit_class_students(user, academic_class)
+
+
 def user_can_edit_grades(
     user: User, academic_class: AcademicClass, period: EvaluationPeriod
 ) -> tuple[bool, str]:
