@@ -1,39 +1,40 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Saisie des notes{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Saisie et contrôle des notes</h1>
-        <small class="text-muted">
-            Navigation clavier : <kbd>Entrée</kbd> / <kbd>↓</kbd> élève suivant • <kbd>Tab</kbd> matière suivante •
-            <code>ABS</code> = Absent • <code>DISP</code> = Dispensé • Vide = Non saisie (jamais transformé en 0)
-        </small>
+        <h1 class="yn-page-title mb-1">Saisie et contrôle des notes</h1>
+        <p class="text-muted small mb-0">
+            Navigation clavier : <kbd>Entrée</kbd> / <kbd>↓</kbd> élève suivant · <kbd>Tab</kbd> matière suivante ·
+            <code>ABS</code> = Absent · <code>DISP</code> = Dispensé · Vide = Non saisie (jamais transformé en 0)
+        </p>
     </div>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
         {% if can_edit %}
         <span id="grade-save-status" class="badge rounded-pill text-bg-success px-3 py-2">
-            ● Toutes les saisies sont enregistrées
+            Toutes les saisies sont enregistrées
         </span>
         {% endif %}
         {% if selected_class %}
         <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}"
-           class="btn btn-sm btn-outline-primary">
-            Matières & barèmes
+           class="btn btn-sm btn-outline-secondary">
+            {{ icon('book-open', 15) }} Matières & barèmes
         </a>
         {% endif %}
         {% if selected_class and selected_period %}
         <a href="{{ url_for('grades.grade_history_view', class_id=selected_class.id, period_id=selected_period.id) }}"
            class="btn btn-sm btn-outline-secondary">
-            Historique des modifications
+            {{ icon('history', 15) }} Historique
         </a>
         {% endif %}
     </div>
 </div>
 
-<!-- Filtres Année / Classe / Période / Matière / Recherche (§8.1, §8.2 CdC) -->
+<!-- Filtres Année / Classe / Période / Matière / Recherche -->
 <div class="card mb-3">
-    <div class="card-body py-2">
+    <div class="card-body py-2 px-3">
         <form method="get" action="{{ url_for('grades.grade_entry') }}" class="row g-2 align-items-center">
             <div class="col-md-2">
                 <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -64,7 +65,11 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <input type="text" name="q" class="form-control form-control-sm" value="{{ search_q }}" placeholder="Rechercher élève…">
+                <div class="yn-search-box" style="min-width: 0;">
+                    {{ icon('search', 14) }}
+                    <input type="text" name="q" class="form-control form-control-sm" value="{{ search_q }}"
+                           placeholder="Filtrer élève…" data-yn-table-filter="#grades-matrix-table">
+                </div>
             </div>
             <div class="col-md-2 d-flex align-items-center justify-content-between gap-1">
                 <div class="form-check m-0">
@@ -72,27 +77,34 @@
                            {% if only_missing %}checked{% endif %} onchange="this.form.submit()">
                     <label class="form-check-label small" for="chkMissing">Manquantes</label>
                 </div>
-                <button type="submit" class="btn btn-sm btn-secondary">OK</button>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">OK</button>
             </div>
         </form>
     </div>
 </div>
 
 {% if not selected_class or not selected_period %}
-<div class="alert alert-warning">
-    Configurez d'abord une <a href="{{ url_for('academics.classes_list') }}">classe</a> et une
-    <a href="{{ url_for('settings.periods') }}">période d'évaluation</a> pour saisir les notes.
+<div class="alert alert-warning d-flex align-items-center gap-2">
+    {{ icon('alert-triangle', 17) }}
+    <span>
+        Configurez d'abord une <a href="{{ url_for('academics.classes_list') }}">classe</a> et une
+        <a href="{{ url_for('settings.periods') }}">période d'évaluation</a> pour saisir les notes.
+    </span>
 </div>
 {% elif not all_subjects %}
-<div class="alert alert-warning">
-    Aucune matière active n'est configurée pour la classe <strong>{{ selected_class.name }}</strong>.
-    <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}">Configurer les matières →</a>
+<div class="alert alert-warning d-flex align-items-center gap-2">
+    {{ icon('alert-triangle', 17) }}
+    <span>
+        Aucune matière active n'est configurée pour la classe <strong>{{ selected_class.name }}</strong>.
+        <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}">Configurer les matières</a>
+    </span>
 </div>
 {% else %}
 
 {% if not can_edit %}
-<div class="alert alert-secondary py-2 small">
-    <strong>Lecture seule :</strong> {{ edit_lock_reason }}
+<div class="alert alert-info py-2 small d-flex align-items-center gap-2">
+    {{ icon('lock', 16) }}
+    <span><strong>Lecture seule :</strong> {{ edit_lock_reason }}</span>
 </div>
 {% endif %}
 
@@ -105,15 +117,15 @@
     {% endif %}
 
     <div class="card">
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span>
+        <div class="yn-table-toolbar">
+            <span class="small">
                 <strong>{{ selected_class.name }}</strong> — {{ selected_period.name }}
-                • Avancement : <strong>{{ results.completion_rate_percent | dec_fr(1) }} %</strong>
-                ({{ results.ranked_count }} complets / {{ results.active_count }} élèves actifs)
+                · Avancement : <strong class="yn-tabular">{{ results.completion_rate_percent | dec_fr(1) }} %</strong>
+                <span class="text-muted">({{ results.ranked_count }} complets / {{ results.active_count }} élèves actifs)</span>
             </span>
             {% if can_edit %}
             <button type="submit" class="btn btn-sm btn-primary">
-                Enregistrer toutes les notes affichées
+                {{ icon('check', 15) }} Enregistrer toutes les notes affichées
             </button>
             {% endif %}
         </div>
@@ -125,13 +137,13 @@
                 <thead>
                     <tr>
                         <th class="text-center" style="width: 48px;">N°</th>
-                        <th style="min-width: 190px;">Nom et Prénoms</th>
+                        <th style="min-width: 195px;">Nom et Prénoms</th>
                         <th class="text-center" style="width: 38px;">S</th>
                         {% for subj in displayed_subjects %}
-                        <th class="text-center">
-                            <div>{{ subj.short_label or subj.name }}</div>
-                            <div class="text-muted fw-normal" style="font-size: 0.74rem;">
-                                [{{ subj.min_score | compact_fr }}–{{ subj.max_score | compact_fr }}] • Coef {{ subj.coefficient | compact_fr }}
+                        <th class="text-center" style="text-transform: none;">
+                            <div class="fw-semibold" style="font-size: 0.80rem;">{{ subj.short_label or subj.name }}</div>
+                            <div class="text-muted fw-normal yn-tabular" style="font-size: 0.71rem;">
+                                [{{ subj.min_score | compact_fr }}–{{ subj.max_score | compact_fr }}] · Coef {{ subj.coefficient | compact_fr }}
                                 {% if subj.max_score != subj.reference_scale %}
                                     → /{{ subj.reference_scale | compact_fr }}
                                 {% endif %}
@@ -146,11 +158,11 @@
                     {% set row_idx = loop.index0 %}
                     {% set enr = row.enrollment %}
                     <tr>
-                        <td class="text-center fw-semibold">{{ enr.roll_number }}</td>
+                        <td class="text-center fw-semibold yn-tabular">{{ enr.roll_number }}</td>
                         <td class="fw-semibold">
                             <a href="{{ url_for('students.student_detail', enrollment_id=enr.id) }}"
                                class="text-decoration-none text-reset"
-                               title="Ouvrir ou modifier l'identité / la fiche de l'élève">
+                               title="Ouvrir la fiche de l'élève">
                                 {{ enr.student.full_name }}
                             </a>
                         </td>
@@ -179,7 +191,7 @@
                                    data-allow-exemption="{{ '1' if subj.allow_exemption else '0' }}"
                                    autocomplete="off">
                             {% else %}
-                            <span class="fw-semibold">{{ row.subject_cells[subj.id].display_raw }}</span>
+                            <span class="fw-semibold yn-tabular">{{ row.subject_cells[subj.id].display_raw }}</span>
                             {% endif %}
                         </td>
                         {% endfor %}
@@ -187,7 +199,7 @@
                         <td class="text-center small" id="row-summary-{{ enr.id }}">
                             {% if row.is_complete %}
                                 <span class="badge text-bg-success me-1">Complet</span>
-                                <strong>{{ row.display_average }}</strong>
+                                <strong class="yn-tabular">{{ row.display_average }}</strong>
                             {% else %}
                                 <span class="badge text-bg-warning">{{ row.unranked_reason }}</span>
                             {% endif %}
@@ -195,8 +207,8 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{{ 4 + (displayed_subjects | length) }}" class="text-center py-4 text-muted">
-                            Aucun élève actif à afficher pour ces critères.
+                        <td colspan="{{ 4 + (displayed_subjects | length) }}">
+                            {{ empty_state('users', 'Aucun élève actif à afficher', 'Vérifiez vos critères de filtre ou inscrivez des élèves dans cette classe.') }}
                         </td>
                     </tr>
                     {% endfor %}
@@ -205,9 +217,11 @@
         </div>
 
         {% if can_edit and displayed_rows %}
-        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span class="small text-muted">L'enregistrement automatique s'effectue à chaque changement de cellule.</span>
-            <button type="submit" class="btn btn-primary btn-sm">Enregistrer toutes les notes</button>
+            <button type="submit" class="btn btn-primary btn-sm">
+                {{ icon('check', 15) }} Enregistrer toutes les notes
+            </button>
         </div>
         {% endif %}
     </div>

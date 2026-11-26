@@ -1,26 +1,35 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Années scolaires{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 fw-bold mb-0">Gestion des années scolaires</h1>
-    <a href="{{ url_for('settings.periods') }}" class="btn btn-outline-primary btn-sm">Gérer les périodes d'évaluation →</a>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+    <div>
+        <h1 class="yn-page-title mb-1">Gestion des années scolaires</h1>
+        <p class="text-muted small mb-0">Créez, activez ou clôturez les exercices académiques tout en conservant l'historique intégral.</p>
+    </div>
+    <a href="{{ url_for('settings.periods') }}" class="btn btn-outline-primary btn-sm">
+        {{ icon('clock', 15) }} Périodes d'évaluation {{ icon('chevron-right', 14) }}
+    </a>
 </div>
 
 <div class="row g-4">
     {% if can_edit %}
     <div class="col-lg-4">
         <div class="card">
-            <div class="card-header">Créer une nouvelle année scolaire</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('plus', 17) }}
+                <span>Nouvelle année scolaire</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('settings.school_years') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="label">Intitulé de l'année *</label>
+                        <label class="form-label" for="label">Intitulé de l'année <span class="text-danger">*</span></label>
                         <input type="text" id="label" name="label" class="form-control" required placeholder="ex. 2026-2027">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="age_reference_date">Date de référence pour le calcul de l'âge *</label>
+                        <label class="form-label" for="age_reference_date">Date de référence de l'âge <span class="text-danger">*</span></label>
                         <input type="date" id="age_reference_date" name="age_reference_date" class="form-control" required>
                         <small class="text-muted">Idéalement la date officielle de rentrée scolaire (ex. 1er octobre).</small>
                     </div>
@@ -44,9 +53,11 @@
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="make_active" value="1" id="make_active" checked>
-                        <label class="form-check-label" for="make_active">Définir comme année scolaire active</label>
+                        <label class="form-check-label small" for="make_active">Définir comme année scolaire active</label>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Créer l'année scolaire</button>
+                    <button type="submit" class="btn btn-primary w-100">
+                        {{ icon('plus', 15) }} Créer l'année scolaire
+                    </button>
                 </form>
             </div>
         </div>
@@ -55,15 +66,18 @@
 
     <div class="col-lg-{% if can_edit %}8{% else %}12{% endif %}">
         <div class="card">
-            <div class="card-header">Historique des années scolaires</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('calendar', 17) }}
+                <span>Historique des années scolaires</span>
+            </div>
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Année</th>
-                            <th>Date réf. âge</th>
-                            <th>Périodes / Classes</th>
-                            <th>Statut</th>
+                            <th class="yn-sortable">Année</th>
+                            <th class="yn-sortable">Date réf. âge</th>
+                            <th>Périodes & Classes</th>
+                            <th class="yn-sortable">Statut</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -71,15 +85,16 @@
                         {% for yr in years %}
                         <tr>
                             <td>
-                                <div class="fw-bold">{{ yr.label }}</div>
+                                <div class="fw-semibold">{{ yr.label }}</div>
                                 {% if settings.active_school_year_id == yr.id %}
-                                    <span class="badge text-bg-primary">Année active</span>
+                                    <span class="badge text-bg-primary mt-1">Année active</span>
                                 {% endif %}
                             </td>
-                            <td>{{ yr.age_reference_date | date_fr }}</td>
-                            <td>
-                                <a href="{{ url_for('settings.periods', year_id=yr.id) }}">{{ yr.periods | length }} période(s)</a> •
-                                <a href="{{ url_for('academics.classes_list', year_id=yr.id) }}">{{ yr.classes | length }} classe(s)</a>
+                            <td class="yn-tabular">{{ yr.age_reference_date | date_fr }}</td>
+                            <td class="small">
+                                <a href="{{ url_for('settings.periods', year_id=yr.id) }}" class="text-decoration-none">{{ yr.periods | length }} période(s)</a>
+                                <span class="text-muted mx-1">·</span>
+                                <a href="{{ url_for('academics.classes_list', year_id=yr.id) }}" class="text-decoration-none">{{ yr.classes | length }} classe(s)</a>
                             </td>
                             <td>
                                 {% if yr.status == 'CLOTUREE' %}
@@ -120,8 +135,8 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center py-4 text-muted">
-                                Aucune année scolaire n'a encore été créée.
+                            <td colspan="5">
+                                {{ empty_state('calendar', 'Aucune année scolaire créée', 'Créez votre première année scolaire grâce au formulaire ci-contre.') }}
                             </td>
                         </tr>
                         {% endfor %}

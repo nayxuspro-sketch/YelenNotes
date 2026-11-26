@@ -1,16 +1,17 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Absences & Discipline{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Suivi des absences, retards et discipline</h1>
-        <small class="text-muted">Module vie scolaire gouverné par les permissions granulaires <code>absences.*</code> (§3.7 & §4 RBAC)</small>
+        <h1 class="yn-page-title mb-1">Suivi des absences, retards et discipline</h1>
+        <p class="text-muted small mb-0">Registre quotidien de vie scolaire et suivi des justifications par classe.</p>
     </div>
 
     {% if classes %}
     <form method="get" action="{{ url_for('operations.absences_manage') }}" class="d-flex align-items-center gap-2">
-        <label class="small fw-semibold text-nowrap">Classe :</label>
+        <label class="small fw-semibold text-muted text-nowrap">Classe :</label>
         <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for cls in classes %}
             <option value="{{ cls.id }}" {% if selected_class and selected_class.id == cls.id %}selected{% endif %}>
@@ -26,27 +27,30 @@
     {% if can_create and selected_class %}
     <div class="col-xl-4">
         <div class="card">
-            <div class="card-header fw-semibold">Enregistrer une absence / un retard</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('plus', 17) }}
+                <span>Enregistrer une absence / un retard</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('operations.absences_manage') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="create">
                     <input type="hidden" name="class_id" value="{{ selected_class.id }}">
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Élève ({{ selected_class.name }}) *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Élève ({{ selected_class.name }}) <span class="text-danger">*</span></label>
                         <select name="enrollment_id" class="form-select form-select-sm" required>
                             {% for enr in enrollments %}
                             <option value="{{ enr.id }}">{{ enr.roll_number or '—' }} — {{ enr.student.full_name }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label small fw-semibold">Date *</label>
+                            <label class="form-label">Date <span class="text-danger">*</span></label>
                             <input type="date" name="event_date" class="form-control form-control-sm" value="{{ today_iso }}" required>
                         </div>
                         <div class="col-6">
-                            <label class="form-label small fw-semibold">Type *</label>
+                            <label class="form-label">Type <span class="text-danger">*</span></label>
                             <select name="event_type" class="form-select form-select-sm">
                                 <option value="ABSENCE">Absence</option>
                                 <option value="RETARD">Retard</option>
@@ -54,15 +58,17 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Motif / Observation</label>
+                    <div class="mb-3">
+                        <label class="form-label">Motif / Observation</label>
                         <input type="text" name="notes" class="form-control form-control-sm" placeholder="ex. Maladie signalée par le tuteur">
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="justified" value="1" id="abs_just">
                         <label class="form-check-label small" for="abs_just">Absence / retard justifié(e)</label>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">Enregistrer</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        {{ icon('check', 14) }} Enregistrer
+                    </button>
                 </form>
             </div>
         </div>
@@ -71,17 +77,26 @@
 
     <div class="{{ 'col-xl-8' if (can_create and selected_class) else 'col-12' }}">
         <div class="card">
-            <div class="card-header fw-semibold">
-                Registre vie scolaire {% if selected_class %}— Classe {{ selected_class.name }}{% endif %} ({{ records | length }})
+            <div class="yn-table-toolbar">
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                    {{ icon('clock', 17) }}
+                    <span>Registre vie scolaire {% if selected_class %}— Classe {{ selected_class.name }}{% endif %} ({{ records | length }})</span>
+                </div>
+                {% if records | length > 3 %}
+                <div class="yn-search-box">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Filtrer par élève ou motif…" data-yn-table-filter="#absences-table">
+                </div>
+                {% endif %}
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="absences-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Élève</th>
-                            <th>Type</th>
-                            <th>Statut</th>
+                            <th class="yn-sortable">Date</th>
+                            <th class="yn-sortable">Élève</th>
+                            <th class="yn-sortable">Type</th>
+                            <th class="yn-sortable">Statut</th>
                             <th>Motif</th>
                             {% if can_update or can_delete %}<th class="text-end">Actions</th>{% endif %}
                         </tr>
@@ -89,16 +104,16 @@
                     <tbody>
                         {% for rec in records %}
                         <tr>
-                            <td class="small text-nowrap">{{ rec.event_date | date_fr }}</td>
+                            <td class="small text-nowrap yn-tabular">{{ rec.event_date | date_fr }}</td>
                             <td class="fw-semibold small">{{ rec.enrollment.student.full_name }}</td>
-                            <td class="small">
-                                <span class="badge text-bg-light border text-dark">{{ rec.event_type }}</span>
+                            <td>
+                                <span class="badge text-bg-secondary">{{ rec.event_type }}</span>
                             </td>
                             <td>
                                 {% if rec.justified %}
                                 <span class="badge text-bg-success">Justifiée</span>
                                 {% else %}
-                                <span class="badge text-bg-warning text-dark">Non justifiée</span>
+                                <span class="badge text-bg-warning">Non justifiée</span>
                                 {% endif %}
                             </td>
                             <td class="small text-muted">{{ rec.notes or '—' }}</td>
@@ -111,7 +126,7 @@
                                         <input type="hidden" name="action" value="toggle_justified">
                                         <input type="hidden" name="record_id" value="{{ rec.id }}">
                                         {% if selected_class %}<input type="hidden" name="class_id" value="{{ selected_class.id }}">{% endif %}
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary">
                                             {{ 'Déjustifier' if rec.justified else 'Justifier' }}
                                         </button>
                                     </form>
@@ -123,7 +138,7 @@
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="record_id" value="{{ rec.id }}">
                                         {% if selected_class %}<input type="hidden" name="class_id" value="{{ selected_class.id }}">{% endif %}
-                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">✕</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
                                     </form>
                                     {% endif %}
                                 </div>
@@ -131,7 +146,11 @@
                             {% endif %}
                         </tr>
                         {% else %}
-                        <tr><td colspan="6" class="text-center py-4 text-muted">Aucun événement enregistré pour cette classe.</td></tr>
+                        <tr>
+                            <td colspan="6">
+                                {{ empty_state('check-circle', 'Aucun événement enregistré', 'Aucune absence ni retard n’est signalé pour cette classe.') }}
+                            </td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>

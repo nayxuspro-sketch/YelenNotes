@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon %}
 {% block title %}Comptes utilisateurs{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Gestion des comptes utilisateurs</h1>
-        <small class="text-muted">Attribution multi-rôles, activation/désactivation, suspension temporaire et périmètre d'accès (§6 RBAC)</small>
+        <h1 class="yn-page-title mb-1">Gestion des comptes utilisateurs</h1>
+        <p class="text-muted small mb-0">Attribution multi-rôles, activation/désactivation, suspension temporaire et périmètre d'accès.</p>
     </div>
     {% if can_perm('rbac.view') %}
     <a href="{{ url_for('rbac_admin.index') }}" class="btn btn-sm btn-outline-primary">
-        Gérer les rôles & la matrice des permissions →
+        {{ icon('shield-check', 15) }} Rôles & matrice des permissions {{ icon('chevron-right', 14) }}
     </a>
     {% endif %}
 </div>
@@ -18,21 +19,24 @@
     {% if can_create_user %}
     <div class="col-xl-4">
         <div class="card">
-            <div class="card-header fw-semibold">Nouveau compte utilisateur</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('user-plus', 17) }}
+                <span>Nouveau compte utilisateur</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('admin.users_manage') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Identifiant de connexion *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Identifiant de connexion <span class="text-danger">*</span></label>
                         <input type="text" name="username" class="form-control form-control-sm" required placeholder="ex. secretaire_ecole">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Nom et prénom *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Nom et prénom <span class="text-danger">*</span></label>
                         <input type="text" name="full_name" class="form-control form-control-sm" required placeholder="ex. Mme SANOU Fatimata">
                     </div>
                     {% if establishments and (establishments | length) > 1 %}
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Établissement principal *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Établissement principal <span class="text-danger">*</span></label>
                         <select name="establishment_id" class="form-select form-select-sm">
                             {% for est in establishments %}
                             <option value="{{ est.id }}">{{ est.code }} — {{ est.name }}</option>
@@ -40,32 +44,32 @@
                         </select>
                     </div>
                     {% endif %}
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Rôle(s) RBAC attribué(s) * <span class="text-muted fw-normal">(un ou plusieurs)</span></label>
+                    <div class="mb-3">
+                        <label class="form-label">Rôle(s) RBAC attribué(s) <span class="text-danger">*</span></label>
                         <div class="border rounded p-2 bg-light" style="max-height: 170px; overflow-y: auto;">
                             {% for r in available_roles %}
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="role_ids[]" value="{{ r.id }}" id="new_role_{{ r.id }}"
                                        {% if r.code == 'ENSEIGNANT' %}checked{% endif %}>
                                 <label class="form-check-label small" for="new_role_{{ r.id }}">
-                                    <strong>{{ r.name }}</strong> <code class="text-muted">({{ r.code }})</code>
+                                    <strong>{{ r.name }}</strong> <code>{{ r.code }}</code>
                                 </label>
                             </div>
                             {% endfor %}
                         </div>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label small fw-semibold">Mot de passe initial * (8 caractères min.)</label>
+                        <label class="form-label">Mot de passe initial <span class="text-danger">*</span> <span class="text-muted fw-normal">(min. 8 car.)</span></label>
                         <input type="password" name="password" class="form-control form-control-sm" minlength="8" required>
                     </div>
-                    <div class="form-check mb-2">
+                    <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" name="must_change_password" value="1" id="must_chg" checked>
                         <label class="form-check-label small" for="must_chg">Exiger le changement à la première connexion</label>
                     </div>
 
                     {% if all_classes %}
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Classes affectées (pour un Enseignant)</label>
+                    <div class="mb-3">
+                        <label class="form-label">Classes affectées (pour un Enseignant)</label>
                         <div class="border rounded p-2" style="max-height: 130px; overflow-y: auto;">
                             {% for cls in all_classes %}
                             <div class="form-check">
@@ -81,7 +85,7 @@
 
                     {% if all_students %}
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Élève(s) rattaché(s) (pour un Parent / Tuteur)</label>
+                        <label class="form-label">Élève(s) rattaché(s) (pour un Parent / Tuteur)</label>
                         <div class="border rounded p-2" style="max-height: 130px; overflow-y: auto;">
                             {% for st in all_students %}
                             <div class="form-check">
@@ -95,7 +99,9 @@
                     </div>
                     {% endif %}
 
-                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer le compte</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        {{ icon('plus', 15) }} Créer le compte
+                    </button>
                 </form>
             </div>
         </div>
@@ -104,15 +110,24 @@
 
     <div class="{{ 'col-xl-8' if can_create_user else 'col-12' }}">
         <div class="card">
-            <div class="card-header fw-semibold">Comptes enregistrés ({{ users | length }})</div>
+            <div class="yn-table-toolbar">
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                    {{ icon('users', 17) }}
+                    <span>Comptes enregistrés ({{ users | length }})</span>
+                </div>
+                <div class="yn-search-box">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Rechercher un compte ou rôle…" data-yn-table-filter="#users-table">
+                </div>
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="users-table">
                     <thead>
                         <tr>
-                            <th>Identifiant & Nom</th>
+                            <th class="yn-sortable">Identifiant & Nom</th>
                             <th>Rôle(s) actif(s)</th>
                             <th>Périmètre</th>
-                            <th class="text-center">Statut</th>
+                            <th class="text-center yn-sortable">Statut</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -123,14 +138,14 @@
                                 <div><code>{{ u.username }}</code></div>
                                 <div class="fw-semibold small">{{ u.full_name }}</div>
                                 {% if u.permission_overrides | length > 0 %}
-                                <span class="badge text-bg-warning text-dark mt-1" title="Ce compte possède des permissions dérogatoires individuelles">
+                                <span class="badge text-bg-warning mt-1" title="Ce compte possède des permissions dérogatoires individuelles">
                                     {{ u.permission_overrides | length }} surcharge(s) individuelle(s)
                                 </span>
                                 {% endif %}
                             </td>
                             <td>
                                 {% for r in u.active_roles %}
-                                <span class="badge text-bg-light border text-dark me-1 mb-1">{{ r.name }}</span>
+                                <span class="badge text-bg-secondary me-1 mb-1">{{ r.name }}</span>
                                 {% else %}
                                 <span class="badge text-bg-secondary">{{ u.role_label }}</span>
                                 {% endfor %}
@@ -143,7 +158,7 @@
                                 <div>
                                     Classes :
                                     {% for ca in u.class_assignments %}
-                                        <span class="badge text-bg-primary bg-opacity-75">{{ ca.academic_class.name }}</span>
+                                        <span class="badge text-bg-primary">{{ ca.academic_class.name }}</span>
                                     {% endfor %}
                                 </div>
                                 {% endif %}
@@ -157,7 +172,7 @@
                                 {% if not u.is_active %}
                                     <span class="badge text-bg-secondary">Désactivé</span>
                                 {% elif u.is_suspended() %}
-                                    <span class="badge text-bg-warning text-dark">Suspendu</span>
+                                    <span class="badge text-bg-warning">Suspendu</span>
                                     <div class="small text-muted" style="font-size:0.7rem;">jusqu'au {{ u.suspended_until | date_fr }}</div>
                                 {% elif u.is_locked() %}
                                     <span class="badge text-bg-danger">Verrouillé</span>
@@ -169,7 +184,7 @@
                                 <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
                                     {% if can_perm('rbac.view') %}
                                     <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
-                                       class="btn btn-sm btn-outline-dark" title="Voir les permissions effectives et surcharges">
+                                       class="btn btn-sm btn-outline-secondary" title="Voir les permissions effectives et surcharges">
                                         Droits
                                     </a>
                                     {% endif %}
@@ -192,12 +207,12 @@
                                             <input type="hidden" name="student_ids_present" value="1">
                                             <div class="row g-2 mb-2">
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small fw-semibold">Nom complet</label>
+                                                    <label class="form-label small">Nom complet</label>
                                                     <input type="text" name="full_name" class="form-control form-control-sm" value="{{ u.full_name }}" required>
                                                 </div>
                                                 {% if user_is_super_admin and establishments %}
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small fw-semibold">Établissement principal</label>
+                                                    <label class="form-label small">Établissement principal</label>
                                                     <select name="establishment_id" class="form-select form-select-sm" {% if u.id == current_user.id %}disabled{% endif %}>
                                                         {% for est in establishments %}
                                                         <option value="{{ est.id }}" {% if u.establishment_id == est.id %}selected{% endif %}>
@@ -210,7 +225,7 @@
                                             </div>
 
                                             <div class="mb-2">
-                                                <label class="form-label small fw-semibold">Rôle(s) RBAC attribué(s)</label>
+                                                <label class="form-label small">Rôle(s) RBAC attribué(s)</label>
                                                 {% set assigned_rids = u.user_roles | map(attribute='role_id') | list %}
                                                 <div class="border bg-white rounded p-2 d-flex flex-wrap gap-3">
                                                     {% for r in available_roles %}
@@ -232,13 +247,13 @@
 
                                             <div class="row g-2 mb-2">
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small fw-semibold">Suspension temporaire jusqu'au</label>
+                                                    <label class="form-label small">Suspension temporaire jusqu'au</label>
                                                     <input type="date" name="suspended_until" class="form-control form-control-sm"
                                                            value="{{ u.suspended_until.strftime('%Y-%m-%d') if u.suspended_until else '' }}"
                                                            {% if u.id == current_user.id %}disabled{% endif %}>
                                                 </div>
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small fw-semibold">Motif de suspension</label>
+                                                    <label class="form-label small">Motif de suspension</label>
                                                     <input type="text" name="suspension_reason" class="form-control form-control-sm"
                                                            value="{{ u.suspension_reason or '' }}" placeholder="ex. Congé / vérification"
                                                            {% if u.id == current_user.id %}disabled{% endif %}>
@@ -271,7 +286,7 @@
 
                                             {% if all_classes %}
                                             <div class="mb-2">
-                                                <label class="form-label small fw-semibold">Classes affectées (Enseignant)</label>
+                                                <label class="form-label small">Classes affectées (Enseignant)</label>
                                                 <div class="border bg-white rounded p-2" style="max-height: 110px; overflow-y: auto;">
                                                     {% set assigned_cids = u.class_assignments | map(attribute='class_id') | list %}
                                                     {% for cls in all_classes %}
@@ -289,7 +304,7 @@
 
                                             {% if all_students %}
                                             <div class="mb-2">
-                                                <label class="form-label small fw-semibold">Élève(s) rattaché(s) (Parent / Tuteur)</label>
+                                                <label class="form-label small">Élève(s) rattaché(s) (Parent / Tuteur)</label>
                                                 <div class="border bg-white rounded p-2" style="max-height: 110px; overflow-y: auto;">
                                                     {% set linked_sids = u.parent_links | map(attribute='student_id') | list %}
                                                     {% for st in all_students %}
@@ -305,13 +320,13 @@
                                             </div>
                                             {% endif %}
 
-                                            <button type="submit" class="btn btn-sm btn-primary">Enregistrer les modifications</button>
+                                            <button type="submit" class="btn btn-sm btn-primary">{{ icon('check', 14) }} Enregistrer les modifications</button>
                                         </form>
                                     </div>
                                     <div class="col-md-4 border-start">
                                         <form method="post" action="{{ url_for('admin.reset_user_password', user_id=u.id) }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <label class="form-label small fw-semibold">Réinitialiser le mot de passe</label>
+                                            <label class="form-label small">Réinitialiser le mot de passe</label>
                                             <input type="password" name="new_password" class="form-control form-control-sm mb-2"
                                                    minlength="8" placeholder="Nouveau mot de passe temporaire" required>
                                             <button type="submit" class="btn btn-sm btn-outline-warning w-100">

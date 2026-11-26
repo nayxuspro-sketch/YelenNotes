@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Observations des bulletins{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Observations, mentions et décisions des bulletins</h1>
-        <small class="text-muted">Appréciations personnalisées du titulaire et visa de la direction (§12.1, §12.3 CdC)</small>
+        <h1 class="yn-page-title mb-1">Observations, mentions et décisions des bulletins</h1>
+        <p class="text-muted small mb-0">Renseignez les appréciations personnalisées du titulaire, le visa de la direction et les distinctions.</p>
     </div>
 
     <form method="get" action="{{ url_for('grades.period_observations') }}" class="d-flex flex-wrap gap-2">
@@ -36,22 +37,33 @@
     {% if selected_period %}<input type="hidden" name="period_id" value="{{ selected_period.id }}">{% endif %}
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span>
-                Classe <strong>{{ selected_class.name }}</strong> —
-                {{ 'Bilan annuel' if scope == 'ANNUEL' else (selected_period.name if selected_period else '') }}
-            </span>
-            {% if can_edit %}
-            <button type="submit" class="btn btn-sm btn-primary">Enregistrer les observations</button>
-            {% endif %}
+        <div class="yn-table-toolbar">
+            <div class="d-flex align-items-center gap-2 fw-semibold">
+                {{ icon('file-text', 17) }}
+                <span>
+                    Classe {{ selected_class.name }} —
+                    {{ 'Bilan annuel' if scope == 'ANNUEL' else (selected_period.name if selected_period else '') }}
+                </span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <div class="yn-search-box" style="min-width: 200px;">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Filtrer un élève…" data-yn-table-filter="#obs-table">
+                </div>
+                {% if can_edit %}
+                <button type="submit" class="btn btn-sm btn-primary">
+                    {{ icon('check', 15) }} Enregistrer les observations
+                </button>
+                {% endif %}
+            </div>
         </div>
         <div class="table-responsive">
-            <table class="table align-middle mb-0">
+            <table class="table table-hover align-middle mb-0" id="obs-table">
                 <thead>
                     <tr>
-                        <th style="width: 50px;">N°</th>
-                        <th style="min-width: 185px;">Élève</th>
-                        <th class="text-center" style="min-width: 145px;">
+                        <th style="width: 50px;" class="yn-sortable">N°</th>
+                        <th style="min-width: 185px;" class="yn-sortable">Élève</th>
+                        <th class="text-center" style="min-width: 155px; text-transform: none;">
                             {% if scope == 'ANNUEL' %}
                                 Moyenne annuelle{% if computed_results %} /{{ computed_results.general_scale | compact_fr }}{% endif %}
                             {% else %}
@@ -71,22 +83,22 @@
                     {% set ob = obs_by_enrollment.get(enr.id) %}
                     {% set st_res = student_results_by_enrollment.get(enr.id) %}
                     <tr>
-                        <td>{{ enr.roll_number }}</td>
+                        <td class="yn-tabular">{{ enr.roll_number }}</td>
                         <td class="fw-semibold">{{ enr.student.full_name }}</td>
                         <td class="text-center">
                             {% if st_res %}
                                 {% if scope == 'ANNUEL' %}
                                     {% if st_res.is_rankable %}
-                                    <div class="fw-bold text-primary">{{ st_res.display_annual_average }}</div>
-                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} • {{ st_res.appreciation }}{% endif %}</div>
+                                    <div class="fw-bold text-primary yn-tabular">{{ st_res.display_annual_average }}</div>
+                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} · {{ st_res.appreciation }}{% endif %}</div>
                                     {% else %}
                                     <span class="badge text-bg-secondary" title="{{ st_res.unranked_reason }}">{{ st_res.display_annual_average }}</span>
                                     <div class="small text-muted">{{ st_res.unranked_reason }}</div>
                                     {% endif %}
                                 {% else %}
                                     {% if st_res.is_rankable %}
-                                    <div class="fw-bold text-primary">{{ st_res.display_average }}</div>
-                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} • {{ st_res.appreciation }}{% endif %}</div>
+                                    <div class="fw-bold text-primary yn-tabular">{{ st_res.display_average }}</div>
+                                    <div class="small text-muted">{{ st_res.rank_label }}{% if st_res.appreciation and st_res.appreciation != '—' %} · {{ st_res.appreciation }}{% endif %}</div>
                                     {% else %}
                                     <span class="badge text-bg-secondary" title="{{ st_res.unranked_reason }}">{{ st_res.display_average }}</span>
                                     <div class="small text-muted">{{ st_res.unranked_reason }}</div>
@@ -120,7 +132,11 @@
                         {% endif %}
                     </tr>
                     {% else %}
-                    <tr><td colspan="7" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
+                    <tr>
+                        <td colspan="7">
+                            {{ empty_state('users', 'Aucun élève actif dans cette classe', 'Inscrivez des élèves avant de renseigner les observations.') }}
+                        </td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>

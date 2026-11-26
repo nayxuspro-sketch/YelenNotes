@@ -1,20 +1,23 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Passage de classe & Redoublement{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Passage d'une classe à une autre & Redoublement</h1>
-        <small class="text-muted">Transfère les élèves d'une année scolaire vers la suivante tout en préservant l'historique (§7.1 CdC)</small>
+        <h1 class="yn-page-title mb-1">Passage d'une classe à une autre & Redoublement</h1>
+        <p class="text-muted small mb-0">Transférez les élèves d'une année scolaire vers la suivante tout en préservant l'intégralité de leur historique.</p>
     </div>
-    <a href="{{ url_for('students.students_list') }}" class="btn btn-sm btn-outline-secondary">← Retour aux élèves</a>
+    <a href="{{ url_for('students.students_list') }}" class="btn btn-sm btn-outline-secondary">
+        {{ icon('chevron-left', 14) }} Retour aux élèves
+    </a>
 </div>
 
 <div class="card mb-4">
     <div class="card-body">
         <form method="get" action="{{ url_for('students.year_transition') }}" class="row g-3 align-items-end">
             <div class="col-md-5">
-                <label class="form-label fw-semibold">Classe d'origine (année précédente)</label>
+                <label class="form-label">Classe d'origine (année précédente)</label>
                 <select name="source_class_id" class="form-select" required onchange="this.form.submit()">
                     <option value="">— Choisir la classe source —</option>
                     {% for cls in all_classes %}
@@ -25,7 +28,7 @@
                 </select>
             </div>
             <div class="col-md-5">
-                <label class="form-label fw-semibold">Classe d'accueil (nouvelle année ouverte)</label>
+                <label class="form-label">Classe d'accueil (nouvelle année ouverte)</label>
                 <select name="target_class_id" class="form-select" onchange="this.form.submit()">
                     <option value="">— Choisir la classe cible —</option>
                     {% for cls in open_target_classes %}
@@ -38,7 +41,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <button type="submit" class="btn btn-secondary w-100">Charger</button>
+                <button type="submit" class="btn btn-outline-secondary w-100">Charger</button>
             </div>
         </form>
     </div>
@@ -51,10 +54,10 @@
     <input type="hidden" name="target_class_id" value="{{ target_class.id }}">
 
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span>
-                Affectation de <strong>{{ source_class.name }} ({{ source_class.school_year.label }})</strong>
-                vers <strong>{{ target_class.name }} ({{ target_class.school_year.label }})</strong>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="d-flex align-items-center gap-2">
+                {{ icon('layers', 17) }}
+                <span>Affectation de <strong>{{ source_class.name }} ({{ source_class.school_year.label }})</strong> vers <strong>{{ target_class.name }} ({{ target_class.school_year.label }})</strong></span>
             </span>
             <div class="form-check m-0">
                 <input class="form-check-input" type="checkbox" name="renumber_target" value="1" id="renumber_target" checked>
@@ -62,25 +65,25 @@
             </div>
         </div>
         <div class="table-responsive">
-            <table class="table align-middle mb-0">
+            <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>N°</th>
-                        <th>Matricule</th>
-                        <th>Élève</th>
-                        <th>Sexe</th>
+                        <th class="yn-sortable">N°</th>
+                        <th class="yn-sortable">Matricule</th>
+                        <th class="yn-sortable">Élève</th>
+                        <th class="text-center">Sexe</th>
                         <th>Décision vers {{ target_class.name }} ({{ target_class.school_year.label }})</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for enr in source_enrollments %}
                     <tr>
-                        <td>{{ enr.roll_number }}</td>
+                        <td class="yn-tabular">{{ enr.roll_number }}</td>
                         <td><code>{{ enr.student.unique_code }}</code></td>
                         <td class="fw-semibold">{{ enr.student.full_name }}</td>
-                        <td>{{ enr.student.sex }}</td>
+                        <td class="text-center">{{ enr.student.sex }}</td>
                         <td>
-                            <select name="decision_{{ enr.id }}" class="form-select form-select-sm" style="max-width: 280px;">
+                            <select name="decision_{{ enr.id }}" class="form-select form-select-sm" style="max-width: 290px;">
                                 <option value="IGNORES">— Ne pas traiter dans ce lot —</option>
                                 <option value="ADMIS">Admis(e) → Inscrire dans {{ target_class.name }}</option>
                                 <option value="REDOUBLE">Redouble → Inscrire (mention redoublement auto)</option>
@@ -89,14 +92,20 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="text-center py-4 text-muted">Aucun élève actif dans la classe source.</td></tr>
+                    <tr>
+                        <td colspan="5">
+                            {{ empty_state('users', 'Aucun élève actif dans la classe source', 'Sélectionnez une classe source comportant des élèves inscrits.') }}
+                        </td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% if source_enrollments %}
-        <div class="card-footer bg-white text-end">
-            <button type="submit" class="btn btn-primary">Valider le transfert vers {{ target_class.name }}</button>
+        <div class="card-footer text-end">
+            <button type="submit" class="btn btn-primary">
+                {{ icon('check', 15) }} Valider le transfert vers {{ target_class.name }}
+            </button>
         </div>
         {% endif %}
     </div>

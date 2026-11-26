@@ -1,17 +1,18 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Bulletins scolaires PDF{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3 no-print">
     <div>
-        <h1 class="h4 fw-bold mb-0">Bulletins scolaires périodiques et annuels (A4 PDF)</h1>
-        <small class="text-muted">Aperçu avant impression et édition individuelle, par sélection ou pour toute la classe (§12 CdC)</small>
+        <h1 class="yn-page-title mb-1">Bulletins scolaires périodiques et annuels (A4 PDF)</h1>
+        <p class="text-muted small mb-0">Aperçu fidèle avant impression et édition individuelle, par sélection ou pour toute la classe.</p>
     </div>
 </div>
 
 <!-- Sélection Classe / Type de bulletin / Période -->
 <div class="card mb-3 no-print">
-    <div class="card-body py-2">
+    <div class="card-body py-2 px-3">
         <form method="get" action="{{ url_for('reports.bulletins_center') }}" class="row g-2 align-items-center">
             <div class="col-md-4">
                 <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -29,7 +30,7 @@
                 </select>
             </div>
             {% if scope == 'PERIODE' %}
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     {% for p in periods %}
                     <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>
@@ -39,6 +40,12 @@
                 </select>
             </div>
             {% endif %}
+            <div class="col-md-2">
+                <div class="yn-search-box" style="min-width: 0;">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Filtrer élève…" data-yn-table-filter="#bulletins-students-table">
+                </div>
+            </div>
         </form>
     </div>
 </div>
@@ -54,8 +61,10 @@
             {% if selected_period %}<input type="hidden" name="period_id" value="{{ selected_period.id }}">{% endif %}
 
             <div class="card">
-                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <span>Production individuelle ou collective</span>
+                <div class="yn-table-toolbar">
+                    <span class="fw-semibold d-flex align-items-center gap-2">
+                        {{ icon('file-text', 17) }} Production individuelle ou collective
+                    </span>
                     <div class="d-flex gap-1">
                         <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, inline=1) }}"
                            target="_blank" class="btn btn-sm btn-outline-primary">
@@ -63,20 +72,20 @@
                         </a>
                         <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope) }}"
                            class="btn btn-sm btn-primary">
-                            PDF Toute la classe
+                            {{ icon('download', 14) }} PDF Toute la classe
                         </a>
                     </div>
                 </div>
-                <div class="table-responsive" style="max-height: 540px;">
-                    <table class="table table-sm table-hover align-middle mb-0">
+                <div class="table-responsive" style="max-height: 580px;">
+                    <table class="table table-sm table-hover align-middle mb-0" id="bulletins-students-table">
                         <thead>
                             <tr>
                                 <th class="text-center" style="width: 36px;">
                                     <input type="checkbox" id="check-all-students" class="form-check-input">
                                 </th>
-                                <th>N°</th>
-                                <th>Élève</th>
-                                <th class="text-center">Moyenne</th>
+                                <th class="yn-sortable">N°</th>
+                                <th class="yn-sortable">Élève</th>
+                                <th class="text-center yn-sortable">Moyenne</th>
                                 <th class="text-center">Rang</th>
                                 <th class="text-end">Actions</th>
                             </tr>
@@ -84,37 +93,41 @@
                         <tbody>
                             {% for row in res.active_rows %}
                             {% set enr = row.enrollment %}
-                            <tr class="{% if preview_enrollment_id == enr.id %}table-primary{% endif %}">
+                            <tr class="{% if preview_enrollment_id == enr.id %}table-active{% endif %}">
                                 <td class="text-center">
                                     <input type="checkbox" name="enrollment_ids[]" value="{{ enr.id }}"
                                            class="form-check-input student-select-checkbox">
                                 </td>
-                                <td>{{ enr.roll_number }}</td>
+                                <td class="yn-tabular">{{ enr.roll_number }}</td>
                                 <td class="fw-semibold">{{ enr.student.full_name }}</td>
-                                <td class="text-center fw-bold">
+                                <td class="text-center fw-bold yn-tabular">
                                     {{ row.display_annual_average if scope == 'ANNUEL' else row.display_average }}
                                 </td>
                                 <td class="text-center small">{{ row.rank_label }}</td>
                                 <td class="text-end">
-                                    <div class="btn-group btn-group-sm">
+                                    <div class="d-inline-flex gap-1">
                                         <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, preview_id=enr.id) }}"
-                                           class="btn btn-outline-secondary">Aperçu</a>
+                                           class="btn btn-sm btn-outline-secondary">Aperçu</a>
                                         <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, enrollment_id=enr.id) }}"
-                                           class="btn btn-outline-dark">PDF</a>
+                                           class="btn btn-sm btn-outline-primary">PDF</a>
                                     </div>
                                 </td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="6" class="text-center py-4 text-muted">Aucun élève actif dans cette classe.</td></tr>
+                            <tr>
+                                <td colspan="6">
+                                    {{ empty_state('users', 'Aucun élève actif dans cette classe') }}
+                                </td>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 {% if res.active_rows %}
-                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span class="small text-muted">Cochez les élèves souhaités pour un PDF groupé :</span>
-                    <button type="submit" name="selection_mode" value="selected" class="btn btn-sm btn-outline-primary">
-                        Générer PDF de la sélection
+                    <button type="submit" name="selection_mode" value="selected" class="btn btn-sm btn-outline-primary" data-no-loading="1">
+                        {{ icon('download', 14) }} Générer PDF de la sélection
                     </button>
                 </div>
                 {% endif %}
@@ -122,22 +135,26 @@
         </form>
     </div>
 
-    <!-- Aperçu avant impression intégré (§12.4 CdC) -->
+    <!-- Aperçu avant impression sur papier blanc officiel (§9) -->
     <div class="col-lg-6">
         {% set target_id = preview_enrollment_id or (res.active_rows[0].enrollment.id if res.active_rows else None) %}
         {% set prev_row = res.all_rows_by_enrollment.get(target_id) if target_id else None %}
         {% if prev_row %}
-        <div class="d-flex justify-content-between align-items-center mb-2 no-print">
-            <span class="fw-semibold small">Aperçu avant impression — {{ prev_row.enrollment.student.full_name }}</span>
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2 no-print">
+            <span class="fw-semibold small">Aperçu officiel A4 — {{ prev_row.enrollment.student.full_name }}</span>
             <div class="d-flex gap-1">
-                <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">Imprimer cet aperçu</button>
+                <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+                    {{ icon('printer', 14) }} Imprimer
+                </button>
                 <a href="{{ url_for('reports.bulletins_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, enrollment_id=prev_row.enrollment.id, inline=1) }}"
-                   target="_blank" class="btn btn-sm btn-primary">Ouvrir le PDF A4 exact</a>
+                   target="_blank" class="btn btn-sm btn-primary">
+                    {{ icon('file-text', 14) }} Ouvrir le PDF A4 exact
+                </a>
             </div>
         </div>
 
         <div class="yn-paper-preview">
-            <div class="row text-center border-bottom pb-2 mb-2 small">
+            <div class="row text-center border-bottom pb-2 mb-3 small align-items-center">
                 <div class="col-5">
                     <div class="fw-bold text-uppercase">{{ settings.country }}</div>
                     <div class="fst-italic">{{ settings.motto }}</div>
@@ -154,7 +171,7 @@
                 </div>
             </div>
 
-            <div class="text-center fw-bold my-2">
+            <div class="text-center fw-bold my-2 py-1 border-top border-bottom" style="letter-spacing: 0.04em;">
                 {% if scope == 'ANNUEL' %}
                     BULLETIN SCOLAIRE ANNUEL
                 {% else %}
@@ -162,10 +179,10 @@
                 {% endif %}
             </div>
 
-            <div class="border rounded p-2 bg-light small mb-2 d-flex justify-content-between flex-wrap gap-2">
+            <div class="border rounded p-2 bg-light small mb-3 d-flex justify-content-between flex-wrap gap-2">
                 <div>
                     <div><strong>Élève :</strong> {{ prev_row.enrollment.student.full_name }} (N° {{ prev_row.enrollment.roll_number }})</div>
-                    <div><strong>Né(e) le :</strong> {{ prev_row.enrollment.student.birth_date | date_fr }} ({{ prev_row.age }} ans) • <strong>Sexe :</strong> {{ prev_row.enrollment.student.sex }}</div>
+                    <div><strong>Né(e) le :</strong> {{ prev_row.enrollment.student.birth_date | date_fr }} ({{ prev_row.age }} ans) · <strong>Sexe :</strong> {{ prev_row.enrollment.student.sex }}</div>
                 </div>
                 <div>
                     <div><strong>Classe :</strong> {{ res.academic_class.name }} (Eff. : {{ res.active_rows | length }})</div>
@@ -190,24 +207,24 @@
                     {% set c = prev_row.subject_cells[subj.id] %}
                     <tr>
                         <td>{{ subj.name }}</td>
-                        <td class="text-center fw-semibold">{{ c.display_raw }}</td>
-                        <td class="text-center">/{{ subj.max_score | compact_fr }}</td>
-                        <td class="text-center">{{ c.coefficient_applied | compact_fr if c.coefficient_applied > 0 else '—' }}</td>
-                        <td class="text-center">{{ c.display_points }}</td>
+                        <td class="text-center fw-semibold yn-tabular">{{ c.display_raw }}</td>
+                        <td class="text-center yn-tabular">/{{ subj.max_score | compact_fr }}</td>
+                        <td class="text-center yn-tabular">{{ c.coefficient_applied | compact_fr if c.coefficient_applied > 0 else '—' }}</td>
+                        <td class="text-center yn-tabular">{{ c.display_points }}</td>
                         <td class="text-center">{{ c.appreciation }}</td>
                     </tr>
                     {% endfor %}
                     <tr class="table-light fw-bold">
                         <td colspan="3">TOTAUX</td>
-                        <td class="text-center">{{ prev_row.total_coefficients | compact_fr }}</td>
-                        <td class="text-center">{{ prev_row.total_weighted_points | dec_fr(res.decimal_places) }}</td>
+                        <td class="text-center yn-tabular">{{ prev_row.total_coefficients | compact_fr }}</td>
+                        <td class="text-center yn-tabular">{{ prev_row.total_weighted_points | dec_fr(res.decimal_places) }}</td>
                         <td></td>
                     </tr>
                 </tbody>
             </table>
-            <div class="border p-2 bg-light small mb-2">
-                <strong>MOYENNE GÉNÉRALE : {{ prev_row.display_average }} /{{ res.general_scale | compact_fr }}</strong> •
-                <strong>RANG :</strong> {{ prev_row.rank_label }} •
+            <div class="border rounded p-2 bg-light small mb-2">
+                <strong>MOYENNE GÉNÉRALE : {{ prev_row.display_average }} /{{ res.general_scale | compact_fr }}</strong> ·
+                <strong>RANG :</strong> {{ prev_row.rank_label }} ·
                 <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
             </div>
             {% else %}
@@ -225,28 +242,32 @@
                     {% set ss = prev_row.subject_summaries[subj.id] %}
                     <tr>
                         <td>{{ subj.name }}</td>
-                        <td class="text-center">{{ subj.coefficient | compact_fr }}</td>
-                        {% for p in res.periods %}<td class="text-center">{{ ss.period_displays_on_ref.get(p.id, '—') }}</td>{% endfor %}
-                        <td class="text-center fw-bold">{{ ss.display_annual_subject_average }}</td>
+                        <td class="text-center yn-tabular">{{ subj.coefficient | compact_fr }}</td>
+                        {% for p in res.periods %}<td class="text-center yn-tabular">{{ ss.period_displays_on_ref.get(p.id, '—') }}</td>{% endfor %}
+                        <td class="text-center fw-bold yn-tabular">{{ ss.display_annual_subject_average }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-            <div class="border p-2 bg-light small mb-2">
-                <strong>MOYENNE ANNUELLE : {{ prev_row.display_annual_average }} /{{ res.general_scale | compact_fr }}</strong> •
-                <strong>RANG ANNUEL :</strong> {{ prev_row.rank_label }} •
+            <div class="border rounded p-2 bg-light small mb-2">
+                <strong>MOYENNE ANNUELLE : {{ prev_row.display_annual_average }} /{{ res.general_scale | compact_fr }}</strong> ·
+                <strong>RANG ANNUEL :</strong> {{ prev_row.rank_label }} ·
                 <strong>APPRÉCIATION :</strong> {{ prev_row.appreciation or '—' }}
             </div>
             {% endif %}
 
             <div class="row g-2 small mt-2">
-                <div class="col-6 border p-2">
-                    <div class="fw-bold">Le / La Titulaire : {{ res.academic_class.titulaire_name }}</div>
-                    <div class="text-muted">{{ prev_row.teacher_observation or 'Observations : …' }}</div>
+                <div class="col-6">
+                    <div class="border rounded p-2 h-100">
+                        <div class="fw-bold">Le / La Titulaire : {{ res.academic_class.titulaire_name }}</div>
+                        <div class="text-muted mt-1">{{ prev_row.teacher_observation or 'Observations : …' }}</div>
+                    </div>
                 </div>
-                <div class="col-6 border p-2">
-                    <div class="fw-bold">{{ res.academic_class.director_title }} : {{ res.academic_class.director_name }}</div>
-                    <div class="text-muted">{{ prev_row.director_observation or 'Visa et cachet : …' }}</div>
+                <div class="col-6">
+                    <div class="border rounded p-2 h-100">
+                        <div class="fw-bold">{{ res.academic_class.director_title }} : {{ res.academic_class.director_name }}</div>
+                        <div class="text-muted mt-1">{{ prev_row.director_observation or 'Visa et cachet : …' }}</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -254,6 +275,8 @@
     </div>
 </div>
 {% else %}
-<div class="alert alert-info">Sélectionnez une classe configurée pour générer et prévisualiser les bulletins scolaires.</div>
+<div class="card">
+    {{ empty_state('file-text', 'Aucun bulletin disponible', 'Sélectionnez une classe configurée pour générer et prévisualiser les bulletins scolaires.') }}
+</div>
 {% endif %}
 {% endblock %}

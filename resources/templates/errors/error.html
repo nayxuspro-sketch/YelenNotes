@@ -1,22 +1,27 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon %}
 {% block title %}Erreur {{ code }}{% endblock %}
 
 {% block content %}
-<div class="card mx-auto mt-4" style="max-width: 600px;">
-    <div class="card-body p-4 text-center">
-        <span class="badge text-bg-secondary mb-2">Code {{ code }}</span>
-        <h1 class="h4 fw-bold mb-3">{{ title }}</h1>
+<div class="card mx-auto mt-4" style="max-width: 560px;">
+    <div class="card-body p-5 text-center">
+        <div class="yn-empty-icon mx-auto mb-3">{{ icon('alert-triangle', 24) }}</div>
+        <span class="badge text-bg-secondary mb-2">Code HTTP {{ code }}</span>
+        <h1 class="h4 fw-bold mb-2">{{ title }}</h1>
         <p class="text-muted mb-4">{{ message }}</p>
-        <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Retour au tableau de bord</a>
+        <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}" class="btn btn-primary">
+            Retour à l'espace d'accueil
+        </a>
     </div>
 </div>
 {% endblock %}
 
 {% block guest_content %}
-<div class="card mx-auto mt-4" style="max-width: 600px;">
-    <div class="card-body p-4 text-center">
-        <span class="badge text-bg-secondary mb-2">Code {{ code }}</span>
-        <h1 class="h4 fw-bold mb-3">{{ title }}</h1>
+<div class="yn-auth-card" style="max-width: 520px;">
+    <div class="p-5 text-center">
+        <div class="yn-empty-icon mx-auto mb-3">{{ icon('alert-triangle', 24) }}</div>
+        <span class="badge text-bg-secondary mb-2">Code HTTP {{ code }}</span>
+        <h1 class="h4 fw-bold mb-2">{{ title }}</h1>
         <p class="text-muted mb-4">{{ message }}</p>
         <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Aller à la page de connexion</a>
     </div>

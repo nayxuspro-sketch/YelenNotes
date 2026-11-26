@@ -1,27 +1,28 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon %}
 {% block title %}Fiche élève — {{ student.full_name }}{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">{{ student.full_name }}</h1>
-        <small class="text-muted">
-            Matricule : <code>{{ student.unique_code }}</code> •
-            Classe {{ academic_class.name }} ({{ academic_class.school_year.label }})
-        </small>
+        <h1 class="yn-page-title mb-1">{{ student.full_name }}</h1>
+        <p class="text-muted small mb-0">
+            Matricule : <code>{{ student.unique_code }}</code> ·
+            Classe <strong>{{ academic_class.name }}</strong> ({{ academic_class.school_year.label }})
+        </p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         {% if prev_enrollment_id %}
         <a href="{{ url_for('students.student_detail', enrollment_id=prev_enrollment_id) }}" class="btn btn-sm btn-outline-secondary">
-            ← Élève précédent
+            {{ icon('chevron-left', 14) }} Élève précédent
         </a>
         {% endif %}
         {% if next_enrollment_id %}
         <a href="{{ url_for('students.student_detail', enrollment_id=next_enrollment_id) }}" class="btn btn-sm btn-outline-secondary">
-            Élève suivant →
+            Élève suivant {{ icon('chevron-right', 14) }}
         </a>
         {% endif %}
-        <a href="{{ url_for('students.students_list', class_id=academic_class.id) }}" class="btn btn-sm btn-outline-dark">
+        <a href="{{ url_for('students.students_list', class_id=academic_class.id) }}" class="btn btn-sm btn-outline-secondary">
             Retour à la classe
         </a>
     </div>
@@ -31,7 +32,9 @@
     <div class="col-lg-7">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Identité et informations de scolarité ({{ academic_class.school_year.label }})</span>
+                <span class="d-flex align-items-center gap-2">
+                    {{ icon('users', 17) }} Identité et scolarité ({{ academic_class.school_year.label }})
+                </span>
                 {% if can_edit %}
                 <span class="badge text-bg-primary">Modification autorisée</span>
                 {% else %}
@@ -44,17 +47,17 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Numéro d'ordre</label>
+                            <label class="form-label">Numéro d'ordre</label>
                             <input type="number" name="roll_number" class="form-control" min="1"
                                    value="{{ enrollment.roll_number }}" {% if not can_edit %}disabled{% endif %}>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Matricule / Identifiant</label>
+                            <label class="form-label">Matricule / Identifiant</label>
                             <input type="text" name="unique_code" class="form-control font-monospace"
                                    value="{{ student.unique_code }}" {% if not can_edit %}disabled{% endif %}>
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label fw-semibold">Sexe *</label>
+                            <label class="form-label">Sexe <span class="text-danger">*</span></label>
                             <select name="sex" class="form-select" {% if not can_edit %}disabled{% endif %}>
                                 <option value="F" {% if student.sex == 'F' %}selected{% endif %}>Féminin (F)</option>
                                 <option value="M" {% if student.sex == 'M' %}selected{% endif %}>Masculin (M)</option>
@@ -64,12 +67,12 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-5">
-                            <label class="form-label fw-semibold">Nom *</label>
+                            <label class="form-label">Nom <span class="text-danger">*</span></label>
                             <input type="text" name="last_name" class="form-control" value="{{ student.last_name }}"
                                    {% if not can_edit %}disabled{% endif %} required>
                         </div>
                         <div class="col-md-7">
-                            <label class="form-label fw-semibold">Prénoms *</label>
+                            <label class="form-label">Prénoms <span class="text-danger">*</span></label>
                             <input type="text" name="first_names" class="form-control" value="{{ student.first_names }}"
                                    {% if not can_edit %}disabled{% endif %} required>
                         </div>
@@ -77,13 +80,13 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Date de naissance *</label>
+                            <label class="form-label">Date de naissance <span class="text-danger">*</span></label>
                             <input type="date" name="birth_date" class="form-control"
                                    value="{{ student.birth_date.isoformat() }}" {% if not can_edit %}disabled{% endif %} required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Âge au {{ academic_class.school_year.age_reference_date | date_fr }}</label>
-                            <input type="text" class="form-control bg-light" value="{{ student.age_at(academic_class.school_year.age_reference_date) }} ans" disabled>
+                            <input type="text" class="form-control" value="{{ student.age_at(academic_class.school_year.age_reference_date) }} ans" disabled>
                         </div>
                     </div>
 
@@ -100,7 +103,7 @@
                         </div>
                     </div>
 
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label">Observations</label>
                         <textarea name="observations" rows="2" class="form-control" {% if not can_edit %}disabled{% endif %}>{{ enrollment.observations or '' }}</textarea>
                     </div>
@@ -108,11 +111,11 @@
                     {% if can_edit %}
                     <div class="d-flex flex-wrap gap-2">
                         <button type="submit" name="action" value="save" class="btn btn-primary">
-                            Enregistrer les modifications
+                            {{ icon('check', 15) }} Enregistrer les modifications
                         </button>
                         {% if next_enrollment_id %}
                         <button type="submit" name="action" value="save_and_next" class="btn btn-outline-primary">
-                            Enregistrer et élève suivant →
+                            Enregistrer et élève suivant {{ icon('chevron-right', 14) }}
                         </button>
                         {% endif %}
                     </div>
@@ -123,9 +126,11 @@
     </div>
 
     <div class="col-lg-5">
-        <!-- Désactivation / Réactivation sans suppression (§7.1 CdC) -->
         <div class="card mb-4">
-            <div class="card-header">Statut de présence dans la classe</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('user-check', 17) }}
+                <span>Statut de présence dans la classe</span>
+            </div>
             <div class="card-body">
                 <p class="small mb-2">
                     Statut actuel :
@@ -159,17 +164,19 @@
             </div>
         </div>
 
-        <!-- Historique pluriannuel des inscriptions -->
         <div class="card">
-            <div class="card-header">Parcours scolaire pluriannuel</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('history', 17) }}
+                <span>Parcours scolaire pluriannuel</span>
+            </div>
             <ul class="list-group list-group-flush">
                 {% for h in history_enrollments %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
                         <div class="fw-semibold">{{ h.academic_class.school_year.label }} — {{ h.academic_class.name }}</div>
                         <small class="text-muted">
-                            N° {{ h.roll_number }} • Titulaire : {{ h.academic_class.titulaire_name }}
-                            {% if h.annual_decision %} • Décision : <strong>{{ h.annual_decision }}</strong>{% endif %}
+                            N° {{ h.roll_number }} · Titulaire : {{ h.academic_class.titulaire_name }}
+                            {% if h.annual_decision %} · Décision : <strong>{{ h.annual_decision }}</strong>{% endif %}
                         </small>
                     </div>
                     <a href="{{ url_for('reports.bulletins_center', class_id=h.class_id, scope='ANNUEL', preview_id=h.id) }}"
