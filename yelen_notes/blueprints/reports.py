@@ -34,8 +34,12 @@ from yelen_notes.models import (
 from yelen_notes.paths import RuntimePaths
 from yelen_notes.security import (
     get_accessible_classes_query,
+    get_accessible_years_query,
+    has_permission,
+    is_strictly_scoped_parent,
+    permission_required,
     record_audit_log,
-    roles_required,
+    user_can_access_establishment,
     user_can_view_class,
 )
 from yelen_notes.services.calculation_service import (
@@ -103,8 +107,10 @@ def _archive_document(folder: Path, filename: str, content: bytes) -> None:
 
 
 @reports_bp.route("/resultats/releve")
-@login_required
+@permission_required("bulletins.view", module="bulletins")
 def period_releve():
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
     selected_year, classes, periods, selected_class, selected_period = _select_context()
     settings = EstablishmentSettings.get_singleton()
     results = None
@@ -124,7 +130,7 @@ def period_releve():
 
 
 @reports_bp.route("/resultats/releve/pdf")
-@login_required
+@permission_required("bulletins.print", module="bulletins")
 def period_releve_pdf():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -152,7 +158,7 @@ def period_releve_pdf():
 
 
 @reports_bp.route("/resultats/releve/excel")
-@login_required
+@permission_required("bulletins.export", module="bulletins")
 def period_releve_excel():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -176,8 +182,10 @@ def period_releve_excel():
 
 
 @reports_bp.route("/resultats/classement")
-@login_required
+@permission_required("bulletins.view", module="bulletins")
 def merit_ranking():
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
     selected_year, classes, periods, selected_class, selected_period = _select_context()
     scope = request.args.get("scope", "PERIODE")
     if scope not in ("PERIODE", "ANNUEL"):
@@ -207,7 +215,7 @@ def merit_ranking():
 
 
 @reports_bp.route("/resultats/classement/pdf")
-@login_required
+@permission_required("bulletins.print", module="bulletins")
 def merit_ranking_pdf():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -243,7 +251,7 @@ def merit_ranking_pdf():
 
 
 @reports_bp.route("/resultats/classement/excel")
-@login_required
+@permission_required("bulletins.export", module="bulletins")
 def merit_ranking_excel():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -273,8 +281,10 @@ def merit_ranking_excel():
 
 
 @reports_bp.route("/resultats/bulletins")
-@login_required
+@permission_required("bulletins.view", module="bulletins")
 def bulletins_center():
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
     selected_year, classes, periods, selected_class, selected_period = _select_context()
     scope = request.args.get("scope", "PERIODE")
     if scope not in ("PERIODE", "ANNUEL"):
@@ -307,7 +317,7 @@ def bulletins_center():
 
 
 @reports_bp.route("/resultats/bulletins/pdf", methods=["GET", "POST"])
-@login_required
+@permission_required("bulletins.print", module="bulletins")
 def bulletins_pdf():
     class_id = request.values.get("class_id", type=int)
     period_id = request.values.get("period_id", type=int)
@@ -360,19 +370,22 @@ def bulletins_pdf():
 
 
 @reports_bp.route("/resultats/tableau-synoptique")
-@login_required
+@permission_required("bulletins.view", module="bulletins")
 def synoptic_report():
     """Fiche statistique « TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES » par période d'évaluation."""
     from datetime import datetime
+
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
 
     # Permettre la sélection directe de l'année scolaire sur la fiche (§2 & §6.1)
     requested_year_id = request.args.get("year_id", type=int)
     if requested_year_id is not None:
         yr_obj = db.session.get(SchoolYear, requested_year_id)
-        if yr_obj is not None:
+        if yr_obj is not None and user_can_access_establishment(current_user, yr_obj.establishment_id):
             session["selected_school_year_id"] = yr_obj.id
 
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
     selected_year, classes, periods, selected_class, selected_period = _select_context()
     subject_id = request.args.get("subject_id", type=int)
     orientation = request.args.get("orientation", "landscape")
@@ -409,7 +422,7 @@ def synoptic_report():
 
 
 @reports_bp.route("/resultats/tableau-synoptique/pdf")
-@login_required
+@permission_required("bulletins.print", module="bulletins")
 def synoptic_report_pdf():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -443,7 +456,7 @@ def synoptic_report_pdf():
 
 
 @reports_bp.route("/resultats/tableau-synoptique/excel")
-@login_required
+@permission_required("bulletins.export", module="bulletins")
 def synoptic_report_excel():
     class_id = request.args.get("class_id", type=int)
     period_id = request.args.get("period_id", type=int)
@@ -499,7 +512,7 @@ def _build_proposition_trace_payload(proposition) -> dict:
 
 
 @reports_bp.route("/resultats/proposition-fin-annee")
-@login_required
+@permission_required("proposition.view", module="proposition")
 def end_of_year_proposition():
     """Fiche annuelle « PROPOSITION DE FIN D'ANNÉE » (consultation écran, impression et gestion des décisions)."""
     from datetime import datetime
@@ -507,10 +520,10 @@ def end_of_year_proposition():
     requested_year_id = request.args.get("year_id", type=int)
     if requested_year_id is not None:
         yr_obj = db.session.get(SchoolYear, requested_year_id)
-        if yr_obj is not None:
+        if yr_obj is not None and user_can_access_establishment(current_user, yr_obj.establishment_id):
             session["selected_school_year_id"] = yr_obj.id
 
-    all_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
+    all_years = get_accessible_years_query(current_user).all()
     selected_year, classes, periods, selected_class, _ = _select_context()
 
     settings = EstablishmentSettings.get_singleton()
@@ -526,7 +539,7 @@ def end_of_year_proposition():
     if selected_class:
         proposition = compute_end_of_year_proposition_report(selected_class, periods)
         can_validate_decisions = (
-            current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
+            has_permission(current_user, "proposition.validate")
             and not selected_class.school_year.is_closed
         )
         trace_logs = (
@@ -563,7 +576,7 @@ def end_of_year_proposition():
 
 
 @reports_bp.route("/resultats/proposition-fin-annee/archiver-trace", methods=["POST"])
-@login_required
+@permission_required("proposition.create", module="proposition")
 def archive_proposition_trace():
     """Enregistre explicitement une trace horodatée des résultats utilisés pour la fiche (§6.7)."""
     class_id = request.form.get("class_id", type=int)
@@ -589,11 +602,13 @@ def archive_proposition_trace():
 
 
 @reports_bp.route("/resultats/proposition-fin-annee/valider-decisions", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("proposition.validate", module="proposition")
 def validate_end_of_year_decisions():
     """Permet à la direction de modifier et valider les décisions définitives de fin d'année (§8)."""
     class_id = request.form.get("class_id", type=int)
     ac = db.get_or_404(AcademicClass, class_id)
+    if not user_can_view_class(current_user, ac.id):
+        abort(403)
     if ac.school_year.is_closed:
         flash("Impossible de modifier les décisions d'une année scolaire clôturée.", "warning")
         return redirect(url_for("reports.end_of_year_proposition", class_id=ac.id))
@@ -635,7 +650,7 @@ def validate_end_of_year_decisions():
 
 
 @reports_bp.route("/resultats/proposition-fin-annee/pdf")
-@login_required
+@permission_required("proposition.print", module="proposition")
 def end_of_year_proposition_pdf():
     from datetime import datetime
 
@@ -678,7 +693,7 @@ def end_of_year_proposition_pdf():
 
 
 @reports_bp.route("/resultats/proposition-fin-annee/excel")
-@login_required
+@permission_required("proposition.export", module="proposition")
 def end_of_year_proposition_excel():
     class_id = request.args.get("class_id", type=int)
     ac = db.get_or_404(AcademicClass, class_id)

@@ -2,11 +2,16 @@
 {% block title %}Journaux de sécurité & Diagnostic{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <div>
         <h1 class="h4 fw-bold mb-0">Journaux d'audit et diagnostic technique</h1>
-        <small class="text-muted">Traçabilité des opérations sensibles et état du serveur local (§8 Arch & §17 CdC)</small>
+        <small class="text-muted">Traçabilité en lecture seule des opérations sensibles, accès refusés et changements RBAC (§9 RBAC & §17 CdC)</small>
     </div>
+    {% if can_export_audit %}
+    <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-success">
+        Exporter le journal (.csv)
+    </a>
+    {% endif %}
 </div>
 
 <!-- Bloc diagnostic système et multiposte -->
@@ -38,13 +43,25 @@
 
 <div class="card">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span>Journal des opérations sensibles ({{ logs | length }} dernières entrées)</span>
-        <form method="get" action="{{ url_for('admin.audit_logs_view') }}" class="d-flex gap-2">
-            <select name="action" class="form-select form-select-sm" onchange="this.form.submit()">
+        <span>Journal des opérations sensibles ({{ logs | length }} dernières entrées — lecture seule)</span>
+        <form method="get" action="{{ url_for('admin.audit_logs_view') }}" class="d-flex flex-wrap gap-2">
+            <select name="module" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                <option value="">— Tous les modules —</option>
+                {% for mod in distinct_modules %}
+                <option value="{{ mod }}" {% if module_filter == mod %}selected{% endif %}>{{ mod }}</option>
+                {% endfor %}
+            </select>
+            <select name="action" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
                 <option value="">— Toutes les actions —</option>
                 {% for act in distinct_actions %}
                 <option value="{{ act }}" {% if action_filter == act %}selected{% endif %}>{{ act }}</option>
                 {% endfor %}
+            </select>
+            <select name="status" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                <option value="">— Tous résultats —</option>
+                <option value="SUCCESS" {% if status_filter == 'SUCCESS' %}selected{% endif %}>SUCCESS</option>
+                <option value="DENIED" {% if status_filter == 'DENIED' %}selected{% endif %}>DENIED</option>
+                <option value="FAILURE" {% if status_filter == 'FAILURE' %}selected{% endif %}>FAILURE</option>
             </select>
         </form>
     </div>
@@ -55,23 +72,35 @@
                     <th>Horodatage (UTC)</th>
                     <th>Utilisateur</th>
                     <th>Profil</th>
-                    <th>IP</th>
+                    <th>Module</th>
                     <th>Action</th>
+                    <th>Résultat</th>
+                    <th>IP</th>
                     <th>Description</th>
                 </tr>
             </thead>
             <tbody>
                 {% for lg in logs %}
-                <tr>
+                <tr class="{% if lg.status == 'DENIED' or lg.status == 'FAILURE' %}table-warning{% endif %}">
                     <td class="small text-nowrap">{{ lg.created_at | datetime_fr }}</td>
                     <td><code>{{ lg.username_snapshot }}</code></td>
                     <td class="small">{{ lg.role_snapshot or '—' }}</td>
-                    <td class="small text-muted">{{ lg.ip_address or '—' }}</td>
+                    <td class="small"><code>{{ lg.module or 'general' }}</code></td>
                     <td><span class="badge text-bg-light border text-dark">{{ lg.action }}</span></td>
+                    <td>
+                        {% if lg.status == 'DENIED' %}
+                            <span class="badge text-bg-danger">REFUSÉ</span>
+                        {% elif lg.status == 'FAILURE' %}
+                            <span class="badge text-bg-warning text-dark">ÉCHEC</span>
+                        {% else %}
+                            <span class="badge text-bg-success">SUCCÈS</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ lg.ip_address or '—' }}</td>
                     <td class="small">{{ lg.summary }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-center py-4 text-muted">Aucune entrée dans le journal.</td></tr>
+                <tr><td colspan="8" class="text-center py-4 text-muted">Aucune entrée dans le journal.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

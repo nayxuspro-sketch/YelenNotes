@@ -16,26 +16,35 @@ from yelen_notes.models import (
     ABSENCE_ZERO,
     ANNUAL_SIMPLE,
     ROLE_ADMIN,
+    ROLE_ADMIN_ETAB,
+    ROLE_COMPTABLE,
     ROLE_CONSULTATION,
     ROLE_DIRECTEUR,
     ROLE_ENSEIGNANT,
+    ROLE_PARENT,
+    ROLE_SECRETAIRE,
+    ROLE_SURVEILLANT,
     ROUNDING_HALF_UP,
     STATUS_BROUILLON,
     STATUS_CLOTUREE,
     STATUS_OUVERTE,
     TIE_COMPETITION,
     AcademicClass,
+    AccountingEntry,
     CalculationPolicy,
     EstablishmentSettings,
     EvaluationPeriod,
     GradingScaleItem,
+    ParentStudentLink,
     SchoolYear,
+    StudentAbsenceRecord,
     Subject,
     TeacherClassAssignment,
     User,
     utcnow_naive,
 )
 from yelen_notes.paths import RuntimePaths
+from yelen_notes.security import ensure_rbac_initialized, invalidate_rbac_cache
 from yelen_notes.services.grade_service import save_student_observation, upsert_single_grade
 from yelen_notes.services.student_service import (
     create_and_enroll_student,
@@ -452,5 +461,88 @@ def populate_demo_database(paths: RuntimePaths) -> dict[str, str]:
                     enrollment=enr, period=t2, subject=subj, raw_input=raw, actor=enseignant, commit=False
                 )
 
+    # Comptes additionnels illustrant le module RBAC centralisé (§3)
+    admin_etab = User(
+        username="admin_etab_demo",
+        full_name="ILBOUDO Clarisse (Admin Établissement Démo)",
+        role=ROLE_ADMIN_ETAB,
+        establishment_id=1,
+        is_active=True,
+    )
+    admin_etab.set_password("AdminEtab2026!")
+
+    secretaire = User(
+        username="secretaire_demo",
+        full_name="SANOU Fatimata (Secrétaire Démo)",
+        role=ROLE_SECRETAIRE,
+        establishment_id=1,
+        is_active=True,
+    )
+    secretaire.set_password("Secretaire2026!")
+
+    comptable = User(
+        username="comptable_demo",
+        full_name="BASSOLÉ Karim (Comptable Démo)",
+        role=ROLE_COMPTABLE,
+        establishment_id=1,
+        is_active=True,
+    )
+    comptable.set_password("Comptable2026!")
+
+    surveillant = User(
+        username="surveillant_demo",
+        full_name="TAPSOBA Moussa (Surveillant Démo)",
+        role=ROLE_SURVEILLANT,
+        establishment_id=1,
+        is_active=True,
+    )
+    surveillant.set_password("Surveillant2026!")
+
+    parent_user = User(
+        username="parent_demo",
+        full_name="COMPAGNÉ Amadou (Parent d'élève Démo)",
+        role=ROLE_PARENT,
+        establishment_id=1,
+        is_active=True,
+    )
+    parent_user.set_password("Parent2026!")
+
+    db.session.add_all([admin_etab, secretaire, comptable, surveillant, parent_user])
+    db.session.flush()
+
+    if enrs:
+        db.session.add(
+            ParentStudentLink(
+                user_id=parent_user.id,
+                student_id=enrs[0].student_id,
+                relationship_label="Père / Tuteur légal",
+            )
+        )
+        db.session.add(
+            StudentAbsenceRecord(
+                establishment_id=1,
+                enrollment_id=enrs[0].id,
+                event_date=date(2027, 1, 18),
+                event_type="ABSENCE",
+                justified=True,
+                notes="Consultation médicale justifiée (Démo)",
+                recorded_by_id=surveillant.id,
+            )
+        )
+        db.session.add(
+            AccountingEntry(
+                establishment_id=1,
+                entry_date=date(2027, 1, 10),
+                entry_type="PAIEMENT",
+                reference="REC-DEMO-001",
+                label="Cotisation APE / Frais de scolarité T1 (Démo)",
+                amount=Decimal("15000.00"),
+                is_validated=True,
+                recorded_by_id=comptable.id,
+            )
+        )
+
     db.session.commit()
+    ensure_rbac_initialized()
+    invalidate_rbac_cache()
     return {"status": "created", "db_path": str(paths.db_path)}

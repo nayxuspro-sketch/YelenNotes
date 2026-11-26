@@ -23,12 +23,23 @@ from yelen_notes.models import (
     ROLE_CONSULTATION,
     ROLE_DIRECTEUR,
     ROLE_ENSEIGNANT,
+    Establishment,
     EstablishmentSettings,
     SchoolYear,
     User,
 )
 from yelen_notes.paths import RuntimePaths, build_runtime_paths
-from yelen_notes.security import enforce_session_security, is_ajax_or_json_request
+from yelen_notes.security import (
+    enforce_session_security,
+    ensure_rbac_initialized,
+    get_accessible_years_query,
+    get_current_establishment_id,
+    get_user_accessible_establishment_ids,
+    has_any_permission,
+    has_permission,
+    is_ajax_or_json_request,
+    is_strictly_scoped_parent,
+)
 from yelen_notes.services.backup_service import create_safe_backup, maybe_trigger_automatic_backup
 from yelen_notes.services.calculation_service import format_compact_decimal_fr, format_decimal_fr
 
@@ -80,6 +91,7 @@ def initialize_database(app: Flask, run_migrations: bool = True) -> None:
         # Garantir l'existence de la ligne singleton des paramètres généraux (sans préconfigurer de règles pédagogiques)
         if inspect(db.engine).has_table("establishment_settings"):
             EstablishmentSettings.get_singleton()
+        ensure_rbac_initialized()
 
 
 def create_app(
@@ -188,16 +200,44 @@ def create_app(
 
     @app.context_processor
     def _inject_global_template_vars() -> dict[str, Any]:
+        from flask_login import current_user as _cu
+
         settings = None
         nav_years = []
         nav_selected_year = None
+        nav_establishments = []
+        nav_current_est = None
         try:
-            if inspect(db.engine).has_table("establishment_settings"):
+            insp = inspect(db.engine)
+            if insp.has_table("establishment_settings"):
                 settings = EstablishmentSettings.get_singleton()
-                nav_years = SchoolYear.query.order_by(SchoolYear.label.desc()).all()
-                nav_selected_year = get_selected_school_year()
+                if getattr(_cu, "is_authenticated", False):
+                    nav_years = get_accessible_years_query(_cu).all()
+                    nav_selected_year = get_selected_school_year()
+                    if insp.has_table("establishments"):
+                        allowed_ests = get_user_accessible_establishment_ids(_cu)
+                        if allowed_ests is None:
+                            nav_establishments = Establishment.query.filter_by(is_active=True).order_by(Establishment.id).all()
+                        elif allowed_ests:
+                            nav_establishments = (
+                                Establishment.query.filter(
+                                    Establishment.id.in_(allowed_ests),
+                                    Establishment.is_active.is_(True),
+                                )
+                                .order_by(Establishment.id)
+                                .all()
+                            )
+                        cur_est_id = get_current_establishment_id(_cu)
+                        nav_current_est = db.session.get(Establishment, cur_est_id)
         except Exception:
             pass
+
+        def _can_perm(code: str) -> bool:
+            return has_permission(_cu, code) if getattr(_cu, "is_authenticated", False) else False
+
+        def _has_any_perm(*codes: str) -> bool:
+            return has_any_permission(_cu, *codes) if getattr(_cu, "is_authenticated", False) else False
+
         return {
             "app_name": app.config["APP_NAME"],
             "app_version": app.config["APP_VERSION"],
@@ -206,8 +246,13 @@ def create_app(
             "is_demo_mode": bool(app.config["IS_DEMO_MODE"]),
             "is_unc_warning": paths.is_unc_path,
             "current_establishment": settings,
+            "nav_establishments": nav_establishments,
+            "nav_current_est": nav_current_est,
             "nav_years": nav_years,
             "nav_selected_year": nav_selected_year,
+            "can_perm": _can_perm,
+            "has_any_perm": _has_any_perm,
+            "is_parent_only": (is_strictly_scoped_parent(_cu) if getattr(_cu, "is_authenticated", False) else False),
             "ROLE_ADMIN": ROLE_ADMIN,
             "ROLE_DIRECTEUR": ROLE_DIRECTEUR,
             "ROLE_ENSEIGNANT": ROLE_ENSEIGNANT,
@@ -303,7 +348,7 @@ def create_app(
             500,
         )
 
-    if auto_init_db and not app.config.get("TESTING"):
+    if auto_init_db:
         initialize_database(app)
 
     return app

@@ -10,12 +10,15 @@ from flask_login import current_user, login_required, login_user, logout_user
 
 from yelen_notes.extensions import db
 from yelen_notes.models import (
-    ROLE_ADMIN,
+    ROLE_SUPER_ADMIN,
+    Establishment,
     EstablishmentSettings,
+    Role,
     User,
+    UserRole,
     utcnow_naive,
 )
-from yelen_notes.security import record_audit_log
+from yelen_notes.security import ensure_rbac_initialized, invalidate_rbac_cache, record_audit_log
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -64,10 +67,12 @@ def bootstrap_admin():
                 form_data=request.form,
             )
 
+        ensure_rbac_initialized()
         admin_user = User(
             username=username,
             full_name=full_name,
-            role=ROLE_ADMIN,
+            role=ROLE_SUPER_ADMIN,
+            establishment_id=1,
             is_active=True,
             must_change_password=False,
             last_login_at=utcnow_naive(),
@@ -76,11 +81,22 @@ def bootstrap_admin():
         db.session.add(admin_user)
         db.session.flush()
 
+        sa_role = Role.query.filter_by(code=ROLE_SUPER_ADMIN).first()
+        if sa_role is not None:
+            db.session.add(UserRole(user_id=admin_user.id, role_id=sa_role.id))
+
         settings = EstablishmentSettings.get_singleton()
+        est1 = db.session.get(Establishment, 1)
         if school_name:
             settings.school_name = school_name
+            if est1 is not None:
+                est1.name = school_name
         if ceb:
             settings.ceb = ceb
+            if est1 is not None:
+                est1.ceb = ceb
+
+        invalidate_rbac_cache()
 
         record_audit_log(
             "INITIAL_BOOTSTRAP",
@@ -133,6 +149,22 @@ def login():
                 "danger",
             )
             return render_template("auth/login.html", next_url=next_url), 429
+
+        if user is not None and user.is_suspended(now):
+            until_str = user.suspended_until.strftime("%d/%m/%Y à %H:%M") if user.suspended_until else ""
+            record_audit_log(
+                "AUTH_SUSPENDED",
+                f"Tentative de connexion sur le compte suspendu '{username}'",
+                user=user,
+                module="auth",
+                status="DENIED",
+                commit=True,
+            )
+            flash(
+                f"Votre accès est temporairement suspendu jusqu'au {until_str}.",
+                "warning",
+            )
+            return render_template("auth/login.html", next_url=next_url), 403
 
         if user is None or not user.is_active or not user.check_password(password):
             if user is not None:

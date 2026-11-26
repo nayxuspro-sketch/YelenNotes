@@ -118,6 +118,7 @@ def create_and_enroll_student(
             academic_class.school_year.age_reference_date.year
         )
         student = Student(
+            establishment_id=academic_class.establishment_id or academic_class.school_year.establishment_id or 1,
             unique_code=code,
             last_name=clean_last,
             first_names=clean_first,

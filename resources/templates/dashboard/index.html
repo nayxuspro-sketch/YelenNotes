@@ -105,19 +105,38 @@
     <div class="col-sm-6 col-xl-3">
         <div class="card h-100">
             <div class="card-body d-flex flex-column justify-content-between">
-                <div class="text-muted small fw-semibold">Accès rapides</div>
+                <div class="text-muted small fw-semibold">Accès rapides adaptés à vos permissions</div>
                 <div class="d-grid gap-1 mt-2">
+                    {% if can_perm('grades.view') %}
                     <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-primary">
-                        Saisir les notes
+                        Saisir / consulter les notes
                     </a>
-                    {% if selected_class %}
+                    {% endif %}
+                    {% if selected_class and can_perm('subjects.view') %}
                     <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}" class="btn btn-sm btn-outline-primary">
                         Matières & barèmes ({{ selected_class.name }})
                     </a>
                     {% endif %}
+                    {% if can_perm('bulletins.view') %}
                     <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-outline-secondary">
                         Éditer les bulletins PDF
                     </a>
+                    {% endif %}
+                    {% if can_perm('accounting.view') %}
+                    <a href="{{ url_for('operations.accounting_manage') }}" class="btn btn-sm btn-outline-success">
+                        Comptabilité scolaire
+                    </a>
+                    {% endif %}
+                    {% if can_perm('absences.view') %}
+                    <a href="{{ url_for('operations.absences_manage') }}" class="btn btn-sm btn-outline-dark">
+                        Suivi des absences
+                    </a>
+                    {% endif %}
+                    {% if can_perm('rbac.view') %}
+                    <a href="{{ url_for('rbac_admin.index') }}" class="btn btn-sm btn-outline-dark">
+                        Rôles & permissions
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

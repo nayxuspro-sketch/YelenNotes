@@ -20,11 +20,17 @@ from yelen_notes.models import (
     Student,
 )
 from yelen_notes.security import (
+    any_permission_required,
     get_accessible_classes_query,
+    has_permission,
+    is_strictly_scoped_parent,
+    permission_required,
     record_audit_log,
-    roles_required,
+    user_can_access_establishment,
+    user_can_create_class_students,
     user_can_edit_class_students,
     user_can_view_class,
+    user_can_view_enrollment,
 )
 from yelen_notes.services.excel_service import (
     export_students_to_excel,
@@ -44,8 +50,11 @@ students_bp = Blueprint("students", __name__)
 
 
 @students_bp.route("/eleves", methods=["GET", "POST"])
-@login_required
+@any_permission_required("students.view", "enrollments.view", module="students")
 def students_list():
+    if is_strictly_scoped_parent(current_user):
+        return redirect(url_for("operations.parent_portal"))
+
     selected_year = get_selected_school_year()
     accessible_classes = (
         get_accessible_classes_query(current_user, selected_year.id).all()
@@ -60,11 +69,7 @@ def students_list():
         if selected_class is None:
             selected_class = accessible_classes[0]
 
-    can_edit = (
-        current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR)
-        and selected_class is not None
-        and not selected_class.school_year.is_closed
-    )
+    can_edit = user_can_create_class_students(current_user, selected_class)
     can_edit_students = user_can_edit_class_students(current_user, selected_class)
 
     if request.method == "POST":
@@ -170,33 +175,41 @@ def students_list():
 
 
 @students_bp.route("/eleves/<int:enrollment_id>", methods=["GET", "POST"])
-@login_required
+@permission_required("students.view", module="students")
 def student_detail(enrollment_id: int):
     enrollment = db.get_or_404(ClassEnrollment, enrollment_id)
     ac = enrollment.academic_class
-    if not user_can_view_class(current_user, ac.id):
+    if not user_can_view_enrollment(current_user, enrollment):
         record_audit_log(
             "ACCESS_DENIED",
             f"Accès refusé à la fiche élève {enrollment_id} ({ac.name}) pour {current_user.username}",
+            module="students",
+            status="DENIED",
             commit=True,
         )
         abort(403)
 
     can_edit = user_can_edit_class_students(current_user, ac)
     can_toggle_status = (
-        current_user.role in (ROLE_ADMIN, ROLE_DIRECTEUR) and not ac.school_year.is_closed
+        has_permission(current_user, "students.delete")
+        and user_can_access_establishment(current_user, ac.establishment_id)
+        and not ac.school_year.is_closed
     )
     student = enrollment.student
 
-    # Navigation rapide précédent / suivant dans la classe
-    ordered_class_ids = [
-        row_id
-        for (row_id,) in db.session.query(ClassEnrollment.id)
-        .join(Student)
-        .filter(ClassEnrollment.class_id == ac.id, ClassEnrollment.is_active.is_(True))
-        .order_by(ClassEnrollment.roll_number, Student.last_name, ClassEnrollment.id)
-        .all()
-    ]
+    # Navigation rapide précédent / suivant dans la classe (uniquement si accès à la liste de classe)
+    ordered_class_ids = (
+        [
+            row_id
+            for (row_id,) in db.session.query(ClassEnrollment.id)
+            .join(Student)
+            .filter(ClassEnrollment.class_id == ac.id, ClassEnrollment.is_active.is_(True))
+            .order_by(ClassEnrollment.roll_number, Student.last_name, ClassEnrollment.id)
+            .all()
+        ]
+        if user_can_view_class(current_user, ac.id)
+        else []
+    )
     prev_enrollment_id = None
     next_enrollment_id = None
     if enrollment.id in ordered_class_ids:
@@ -359,9 +372,11 @@ def students_bulk_edit(class_id: int):
 
 
 @students_bp.route("/eleves/<int:enrollment_id>/statut", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("students.delete", module="students")
 def toggle_student_status(enrollment_id: int):
     enrollment = db.get_or_404(ClassEnrollment, enrollment_id)
+    if not user_can_access_establishment(current_user, enrollment.academic_class.establishment_id):
+        abort(403)
     if enrollment.academic_class.school_year.is_closed:
         flash("Impossible de modifier le statut d'un élève sur une année clôturée.", "danger")
         return redirect(url_for("students.student_detail", enrollment_id=enrollment.id))
@@ -420,9 +435,11 @@ def download_excel_template():
 
 
 @students_bp.route("/eleves/importer-excel/<int:class_id>", methods=["POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@any_permission_required("students.create", "enrollments.create", module="enrollments")
 def import_excel(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
+    if not user_can_create_class_students(current_user, ac):
+        abort(403)
     if ac.school_year.is_closed:
         flash("Impossible d'importer des élèves dans une année clôturée.", "danger")
         return redirect(url_for("students.students_list", class_id=ac.id))
@@ -453,7 +470,7 @@ def import_excel(class_id: int):
 
 
 @students_bp.route("/eleves/exporter-excel/<int:class_id>")
-@login_required
+@permission_required("students.export", module="students")
 def export_excel(class_id: int):
     ac = db.get_or_404(AcademicClass, class_id)
     if not user_can_view_class(current_user, ac.id):
@@ -471,13 +488,15 @@ def export_excel(class_id: int):
 
 
 @students_bp.route("/eleves/passage-annee", methods=["GET", "POST"])
-@roles_required(ROLE_ADMIN, ROLE_DIRECTEUR)
+@permission_required("enrollments.validate", module="enrollments")
 def year_transition():
-    all_classes = (
-        AcademicClass.query.join(SchoolYear)
+    all_classes = [
+        c
+        for c in AcademicClass.query.join(SchoolYear)
         .order_by(SchoolYear.label.desc(), AcademicClass.display_order, AcademicClass.name)
         .all()
-    )
+        if user_can_access_establishment(current_user, c.establishment_id)
+    ]
     source_class_id = request.args.get("source_class_id", type=int) or request.form.get("source_class_id", type=int)
     target_class_id = request.args.get("target_class_id", type=int) or request.form.get("target_class_id", type=int)
 
