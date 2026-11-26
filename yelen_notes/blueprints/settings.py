@@ -44,6 +44,7 @@ from yelen_notes.security import (
     permission_required,
     record_audit_log,
     user_can_access_establishment,
+    user_can_close_year_periods,
     user_can_modify_year_periods,
 )
 
@@ -352,9 +353,10 @@ def periods():
         selected_year and not selected_year.is_closed and has_permission(current_user, "evaluations.create")
     )
     can_modify_periods = user_can_modify_year_periods(current_user, selected_year)
-    can_validate_periods = bool(
+    can_open_periods = bool(
         selected_year and not selected_year.is_closed and has_permission(current_user, "evaluations.validate")
     )
+    can_close_periods = user_can_close_year_periods(current_user, selected_year)
 
     if request.method == "POST":
         if not has_permission(current_user, "evaluations.create") or selected_year is None:
@@ -442,24 +444,69 @@ def periods():
         can_edit=can_create_period,
         can_create_period=can_create_period,
         can_modify_periods=can_modify_periods,
-        can_validate_periods=can_validate_periods,
+        can_open_periods=can_open_periods,
+        can_close_periods=can_close_periods,
+        can_validate_periods=can_open_periods,
     )
 
 
 @settings_bp.route("/periodes/<int:period_id>/statut", methods=["POST"])
-@permission_required("evaluations.validate", module="evaluations")
+@any_permission_required("evaluations.validate", "periods.close", module="evaluations")
 def change_period_status(period_id: int):
     period = db.get_or_404(EvaluationPeriod, period_id)
-    if not user_can_access_establishment(current_user, period.school_year.establishment_id):
+    school_year = period.school_year
+    if not user_can_access_establishment(current_user, school_year.establishment_id):
         abort(403)
-    if period.school_year.is_closed:
+    if school_year.is_closed:
+        if is_strictly_scoped_teacher(current_user):
+            from yelen_notes.models import AcademicClass, TeacherClassAssignment
+
+            has_year_class = (
+                TeacherClassAssignment.query.join(
+                    AcademicClass, TeacherClassAssignment.class_id == AcademicClass.id
+                )
+                .filter(
+                    TeacherClassAssignment.user_id == current_user.id,
+                    TeacherClassAssignment.can_edit_grades.is_(True),
+                    AcademicClass.school_year_id == school_year.id,
+                )
+                .first()
+                is not None
+            )
+            if not has_year_class:
+                abort(403)
         flash("L'année scolaire est clôturée : le statut des périodes est figé.", "danger")
-        return redirect(url_for("settings.periods", year_id=period.school_year_id))
+        return redirect(url_for("settings.periods", year_id=school_year.id))
 
     new_status = (request.form.get("status") or "").strip().upper()
     if new_status not in LIFECYCLE_STATUSES:
         flash("Statut de période invalide.", "danger")
-        return redirect(url_for("settings.periods", year_id=period.school_year_id))
+        return redirect(url_for("settings.periods", year_id=school_year.id))
+
+    if new_status == STATUS_CLOTUREE:
+        if not user_can_close_year_periods(current_user, school_year):
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Tentative non autorisée de clôture de la période '{period.name}' ({school_year.label}) par {current_user.username}",
+                module="evaluations",
+                target_type="EvaluationPeriod",
+                target_id=period.id,
+                status="REFUSED",
+                commit=True,
+            )
+            abort(403)
+    else:
+        if not has_permission(current_user, "evaluations.validate"):
+            record_audit_log(
+                "ACCESS_DENIED",
+                f"Tentative non autorisée de réouverture/changement de statut ({new_status}) de la période '{period.name}' ({school_year.label}) par {current_user.username}",
+                module="evaluations",
+                target_type="EvaluationPeriod",
+                target_id=period.id,
+                status="REFUSED",
+                commit=True,
+            )
+            abort(403)
 
     old_status = period.status
     period.status = new_status
@@ -471,13 +518,14 @@ def change_period_status(period_id: int):
 
     record_audit_log(
         "PERIOD_STATUS_CHANGE",
-        f"Changement de statut de la période '{period.name}' ({period.school_year.label}) : {old_status} -> {new_status}",
+        f"Changement de statut de la période '{period.name}' ({school_year.label}) : {old_status} -> {new_status}",
+        module="evaluations",
         target_type="EvaluationPeriod",
         target_id=period.id,
         commit=True,
     )
     flash(f"Statut de « {period.name} » mis à jour : {new_status}.", "success")
-    return redirect(url_for("settings.periods", year_id=period.school_year_id))
+    return redirect(url_for("settings.periods", year_id=school_year.id))
 
 
 @settings_bp.route("/periodes/<int:period_id>/modifier", methods=["POST"])

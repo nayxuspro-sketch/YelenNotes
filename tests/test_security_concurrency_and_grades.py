@@ -716,14 +716,14 @@ def test_period_modification_by_titulaire_directeur_and_super_admin(app, configu
         assert p2.short_code == "TRIM2"
         assert float(p2.annual_weight) == 2.0
 
-    # 3. TITULAIRE DE LA CLASSE (2026-2027) : voit le bouton Modifier sur 2026-2027 et modifie la période créée
+    # 3. TITULAIRE DE LA CLASSE (2026-2027) : voit les boutons « Modifier » ET « Clôturer » dans la colonne Actions
     tit_c = app.test_client()
     _login_client(tit_c, "titulaire_cm2", "Titulaire2026!")
     p_tit = tit_c.get(f"/periodes?year_id={year_id}")
     assert p_tit.status_code == 200
     html_tit = p_tit.data.decode("utf-8")
     assert f'id="editPeriodModal-{t1_id}"' in html_tit
-    # Le titulaire ne crée pas de nouvelles périodes et ne clôture pas les périodes (séparation des pouvoirs)
+    assert "Clôturer" in html_tit
     assert "Ajouter une période" not in html_tit
     tok_tit = extract_csrf_token(p_tit.data)
 
@@ -786,7 +786,7 @@ def test_period_modification_by_titulaire_directeur_and_super_admin(app, configu
     assert r_bad_dates.status_code == 200
     assert "postérieure" in r_bad_dates.data.decode("utf-8")
 
-    # Le titulaire ne peut ni créer de période ni verrouiller/déverrouiller le statut
+    # Le titulaire ne peut pas créer une nouvelle période
     assert (
         tit_c.post(
             "/periodes",
@@ -794,20 +794,51 @@ def test_period_modification_by_titulaire_directeur_and_super_admin(app, configu
         ).status_code
         == 403
     )
+
+    # Le titulaire de la classe PEUT clôturer la période depuis la colonne Actions
+    r_close_tit = tit_c.post(
+        f"/periodes/{t1_id}/statut",
+        data={"csrf_token": tok_tit, "status": "CLOTUREE"},
+        follow_redirects=True,
+    )
+    assert r_close_tit.status_code == 200
+    with app.app_context():
+        p1_closed = db.session.get(EvaluationPeriod, t1_id)
+        assert p1_closed.status == STATUS_CLOTUREE
+        assert p1_closed.closed_by_id == configured_school["titulaire_id"]
+        assert (
+            AuditLog.query.filter_by(action="PERIOD_STATUS_CHANGE", target_id=t1_id)
+            .order_by(AuditLog.id.desc())
+            .first()
+            is not None
+        )
+
+    # En revanche, la réouverture d'une période clôturée reste réservée à la direction / super admin (403 pour le titulaire)
     assert (
         tit_c.post(
             f"/periodes/{t1_id}/statut",
-            data={"csrf_token": tok_tit, "status": "CLOTUREE"},
+            data={"csrf_token": tok_tit, "status": "OUVERTE"},
         ).status_code
         == 403
     )
+    # Le directeur peut rouvrir la période si nécessaire
+    assert (
+        dir_c.post(
+            f"/periodes/{t1_id}/statut",
+            data={"csrf_token": tok_dir, "status": "OUVERTE"},
+            follow_redirects=True,
+        ).status_code
+        == 200
+    )
 
-    # 4. ISOLATION : un enseignant non titulaire en 2026-2027 reçoit 403 et ne voit pas le modal sur 2026-2027
+    # 4. ISOLATION : un enseignant non titulaire en 2026-2027 reçoit 403 sur modifier ET clôturer et ne voit ni Modifier ni Clôturer
     other_c = app.test_client()
     _login_client(other_c, "titulaire_2025", "AutreAnnee2026!")
     p_other = other_c.get(f"/periodes?year_id={year_id}")
     assert p_other.status_code == 200
-    assert f'id="editPeriodModal-{t1_id}"' not in p_other.data.decode("utf-8")
+    html_other = p_other.data.decode("utf-8")
+    assert f'id="editPeriodModal-{t1_id}"' not in html_other
+    assert f'/periodes/{t1_id}/statut' not in html_other
     tok_other = extract_csrf_token(p_other.data)
     assert (
         other_c.post(
@@ -816,19 +847,35 @@ def test_period_modification_by_titulaire_directeur_and_super_admin(app, configu
         ).status_code
         == 403
     )
+    assert (
+        other_c.post(
+            f"/periodes/{t1_id}/statut",
+            data={"csrf_token": tok_other, "status": "CLOTUREE"},
+        ).status_code
+        == 403
+    )
 
-    # 5. SECRÉTAIRE & CONSULTATION : refusés en 403
+    # 5. SECRÉTAIRE & CONSULTATION : refusés en 403 sur modifier ET clôturer
     for uname, pwd in [("sec_periodes", "SecPass2026!"), ("lecteur", "Lecteur2026!")]:
         unauth_c = app.test_client()
         _login_client(unauth_c, uname, pwd)
         p_unauth = unauth_c.get(f"/periodes?year_id={year_id}")
         assert p_unauth.status_code == 200
-        assert f'id="editPeriodModal-{t1_id}"' not in p_unauth.data.decode("utf-8")
+        html_unauth = p_unauth.data.decode("utf-8")
+        assert f'id="editPeriodModal-{t1_id}"' not in html_unauth
+        assert f'/periodes/{t1_id}/statut' not in html_unauth
         tok_u = extract_csrf_token(p_unauth.data)
         assert (
             unauth_c.post(
                 f"/periodes/{t1_id}/modifier",
                 data={"csrf_token": tok_u, "name": "Interdit", "short_code": "INT", "annual_weight": "1"},
+            ).status_code
+            == 403
+        )
+        assert (
+            unauth_c.post(
+                f"/periodes/{t1_id}/statut",
+                data={"csrf_token": tok_u, "status": "CLOTUREE"},
             ).status_code
             == 403
         )

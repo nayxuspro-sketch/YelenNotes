@@ -447,6 +447,33 @@ def user_can_modify_year_periods(user: User, school_year: SchoolYear | None) -> 
     return True
 
 
+def user_can_close_year_periods(user: User, school_year: SchoolYear | None) -> bool:
+    """Vérifie si l'utilisateur (Super Admin, Directeur, Admin Étab ou Titulaire d'une classe active de l'année) peut clôturer les périodes créées."""
+    if school_year is None or not user or not user.is_authenticated or not user.is_active or user.is_suspended():
+        return False
+    if school_year.is_closed:
+        return False
+    if not user_can_access_establishment(user, school_year.establishment_id):
+        return False
+    if not has_any_permission(user, "evaluations.validate", "periods.close"):
+        return False
+    if is_strictly_scoped_teacher(user):
+        titulaire_assignment = (
+            TeacherClassAssignment.query.join(
+                AcademicClass, TeacherClassAssignment.class_id == AcademicClass.id
+            )
+            .filter(
+                TeacherClassAssignment.user_id == user.id,
+                TeacherClassAssignment.can_edit_grades.is_(True),
+                AcademicClass.school_year_id == school_year.id,
+                AcademicClass.is_active.is_(True),
+            )
+            .first()
+        )
+        return titulaire_assignment is not None
+    return True
+
+
 def user_can_edit_grades(
     user: User, academic_class: AcademicClass, period: EvaluationPeriod
 ) -> tuple[bool, str]:
@@ -618,6 +645,7 @@ __all__ = [
     "update_role",
     "update_role_permissions",
     "user_can_access_establishment",
+    "user_can_close_year_periods",
     "user_can_create_class_students",
     "user_can_edit_class_students",
     "user_can_edit_grades",

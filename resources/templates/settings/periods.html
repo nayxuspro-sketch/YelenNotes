@@ -139,7 +139,7 @@
                                 <span class="small text-muted d-inline-flex align-items-center gap-1">
                                     {{ icon('lock', 13) }} Verrouillé
                                 </span>
-                                {% elif can_modify_periods or can_validate_periods %}
+                                {% elif can_modify_periods or can_open_periods or can_close_periods %}
                                 <div class="d-inline-flex flex-wrap justify-content-end gap-1">
                                     {% if can_modify_periods %}
                                     <button type="button"
@@ -150,22 +150,20 @@
                                         {{ icon('pen-line', 14) }} Modifier
                                     </button>
                                     {% endif %}
-                                    {% if can_validate_periods %}
-                                        {% if p.status != 'OUVERTE' %}
-                                        <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="status" value="OUVERTE">
-                                            <button type="submit" class="btn btn-sm btn-outline-success">Ouvrir</button>
-                                        </form>
-                                        {% endif %}
-                                        {% if p.status != 'CLOTUREE' %}
-                                        <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0"
-                                              onsubmit="return confirm('Clôturer « {{ p.name }} » ? Les notes ne pourront plus être modifiées.');">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="status" value="CLOTUREE">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Clôturer</button>
-                                        </form>
-                                        {% endif %}
+                                    {% if can_open_periods and p.status != 'OUVERTE' %}
+                                    <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="status" value="OUVERTE">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Ouvrir</button>
+                                    </form>
+                                    {% endif %}
+                                    {% if can_close_periods and p.status != 'CLOTUREE' %}
+                                    <form method="post" action="{{ url_for('settings.change_period_status', period_id=p.id) }}" class="m-0"
+                                          onsubmit="return confirm('Clôturer « {{ p.name }} » ? Les notes ne pourront plus être modifiées.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="status" value="CLOTUREE">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Clôturer</button>
+                                    </form>
                                     {% endif %}
                                 </div>
                                 {% else %}
