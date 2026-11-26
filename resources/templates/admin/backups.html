@@ -1,15 +1,16 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Sauvegardes & Restauration{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Sauvegardes et restauration sécurisée</h1>
-        <small class="text-muted">Sauvegarde à chaud via l'API native SQLite + contrôle d'intégrité SHA-256 (§14 CdC & §8 Arch)</small>
+        <h1 class="yn-page-title mb-1">Sauvegardes et restauration sécurisée</h1>
+        <p class="text-muted small mb-0">Sauvegarde à chaud via l'API native SQLite avec contrôle d'intégrité cryptographique SHA-256.</p>
     </div>
     <div>
         {% if db_ok %}
-        <span class="badge text-bg-success px-3 py-2">Intégrité base active : OK</span>
+        <span class="badge text-bg-success px-3 py-2">{{ icon('check-circle', 13) }} Intégrité base active : OK</span>
         {% else %}
         <span class="badge text-bg-danger px-3 py-2">Alerte intégrité : {{ db_msg }}</span>
         {% endif %}
@@ -20,23 +21,28 @@
     <!-- Sauvegarde manuelle immédiate -->
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header">Créer une sauvegarde manuelle maintenant</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('database', 17) }}
+                <span>Créer une sauvegarde manuelle maintenant</span>
+            </div>
             <div class="card-body">
                 <p class="small text-muted">
                     Génère une archive ZIP cohérente contenant <code>ecole.db</code>, le logo de l'établissement
-                    et une empreinte cryptographique vérifiable. Vous pouvez ensuite la copier sur une clé USB.
+                    et une empreinte cryptographique vérifiable prête à être copiée sur clé USB.
                 </p>
                 <form method="post" action="{{ url_for('admin.trigger_manual_backup') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Libellé / motif (facultatif)</label>
+                        <label class="form-label">Libellé / motif (facultatif)</label>
                         <input type="text" name="notes" class="form-control form-control-sm" placeholder="ex. Fin du 1er trimestre avant impression des bulletins">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small">Emplacement spécifique ponctuel (ex. lettre clé USB <code>E:\SauvegardesYelen</code>, laisser vide pour le dossier par défaut)</label>
+                        <label class="form-label">Emplacement spécifique ponctuel (ex. <code>E:\SauvegardesYelen</code>, laisser vide par défaut)</label>
                         <input type="text" name="custom_destination" class="form-control form-control-sm" placeholder="{{ settings.backup_directory or paths.backups_dir }}">
                     </div>
-                    <button type="submit" class="btn btn-primary">Lancer la sauvegarde vérifiée</button>
+                    <button type="submit" class="btn btn-primary">
+                        {{ icon('database', 15) }} Lancer la sauvegarde vérifiée
+                    </button>
                 </form>
             </div>
         </div>
@@ -45,7 +51,10 @@
     <!-- Configuration de la sauvegarde automatique -->
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header">Politique de sauvegarde automatique</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('clock', 17) }}
+                <span>Politique de sauvegarde automatique</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('admin.update_backup_settings') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -56,23 +65,25 @@
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label small">Fréquence (heures)</label>
+                            <label class="form-label">Fréquence (heures)</label>
                             <input type="number" name="auto_backup_interval_hours" class="form-control form-control-sm"
                                    min="1" max="720" value="{{ settings.auto_backup_interval_hours }}" {% if not is_admin %}disabled{% endif %}>
                         </div>
                         <div class="col-6">
-                            <label class="form-label small">Générations auto conservées</label>
+                            <label class="form-label">Générations auto conservées</label>
                             <input type="number" name="backup_retention_count" class="form-control form-control-sm"
                                    min="1" max="200" value="{{ settings.backup_retention_count }}" {% if not is_admin %}disabled{% endif %}>
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small">Répertoire des sauvegardes (vide = <code>{{ paths.backups_dir }}</code>)</label>
+                        <label class="form-label">Répertoire des sauvegardes (vide = <code>{{ paths.backups_dir }}</code>)</label>
                         <input type="text" name="backup_directory" class="form-control form-control-sm"
                                value="{{ settings.backup_directory or '' }}" {% if not is_admin %}disabled{% endif %}>
                     </div>
                     {% if is_admin %}
-                    <button type="submit" class="btn btn-sm btn-outline-primary">Enregistrer la configuration</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        {{ icon('check', 14) }} Enregistrer la configuration
+                    </button>
                     {% endif %}
                 </form>
             </div>
@@ -82,15 +93,20 @@
 
 <!-- Historique des sauvegardes disponibles -->
 <div class="card mb-4">
-    <div class="card-header">Historique des sauvegardes enregistrées</div>
+    <div class="yn-table-toolbar">
+        <div class="fw-semibold d-flex align-items-center gap-2">
+            {{ icon('history', 17) }}
+            <span>Historique des sauvegardes enregistrées ({{ records | length }})</span>
+        </div>
+    </div>
     <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Date (UTC)</th>
-                    <th>Fichier</th>
+                    <th class="yn-sortable">Date (UTC)</th>
+                    <th class="yn-sortable">Fichier</th>
                     <th>Type</th>
-                    <th>Taille</th>
+                    <th class="yn-sortable">Taille</th>
                     <th>Intégrité</th>
                     <th class="text-end">Actions</th>
                 </tr>
@@ -98,13 +114,13 @@
             <tbody>
                 {% for rec in records %}
                 <tr>
-                    <td class="small">{{ rec.created_at | datetime_fr }}</td>
+                    <td class="small yn-tabular">{{ rec.created_at | datetime_fr }}</td>
                     <td>
                         <div class="fw-semibold small">{{ rec.filename }}</div>
                         {% if rec.notes %}<small class="text-muted">{{ rec.notes }}</small>{% endif %}
                     </td>
-                    <td><span class="badge text-bg-light border text-dark">{{ rec.trigger_type }}</span></td>
-                    <td class="small">{{ (rec.size_bytes / 1024) | round(1) }} Ko</td>
+                    <td><span class="badge text-bg-secondary">{{ rec.trigger_type }}</span></td>
+                    <td class="small yn-tabular">{{ (rec.size_bytes / 1024) | round(1) }} Ko</td>
                     <td>
                         {% if rec.integrity_verified %}
                             <span class="badge text-bg-success">Vérifiée</span>
@@ -115,7 +131,7 @@
                     <td class="text-end">
                         <div class="d-inline-flex gap-1">
                             <a href="{{ url_for('admin.download_backup', record_id=rec.id) }}" class="btn btn-sm btn-outline-primary">
-                                Télécharger (USB)
+                                {{ icon('download', 13) }} Télécharger (USB)
                             </a>
                             <form method="post" action="{{ url_for('admin.verify_existing_backup', record_id=rec.id) }}" class="m-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -126,7 +142,9 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="text-center py-4 text-muted">Aucune sauvegarde enregistrée pour le moment.</td>
+                    <td colspan="6">
+                        {{ empty_state('database', 'Aucune sauvegarde enregistrée', 'Lancez votre première sauvegarde manuelle ci-dessus.') }}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -135,9 +153,12 @@
 </div>
 
 {% if is_admin %}
-<!-- Restauration contrôlée avec confirmation explicite (§14 CdC) -->
-<div class="card border-danger">
-    <div class="card-header bg-danger text-white">Restauration d'une sauvegarde (Administrateur uniquement)</div>
+<!-- Restauration contrôlée avec confirmation explicite -->
+<div class="card" style="border-color: var(--yn-danger-border);">
+    <div class="card-header d-flex align-items-center gap-2 text-danger">
+        {{ icon('alert-triangle', 17) }}
+        <span>Restauration d'une sauvegarde (Administrateur uniquement)</span>
+    </div>
     <div class="card-body">
         <div class="alert alert-warning small">
             <strong>Attention :</strong> la restauration remplace les données actuelles par celles de l'archive choisie.
@@ -147,7 +168,7 @@
         <form method="post" action="{{ url_for('admin.restore_backup') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-4">
-                <label class="form-label small fw-semibold">Choisir une sauvegarde de l'historique</label>
+                <label class="form-label">Choisir une sauvegarde de l'historique</label>
                 <select name="record_id" class="form-select form-select-sm">
                     <option value="">— Ou importer un fichier .zip ci-contre —</option>
                     {% for rec in records %}
@@ -156,11 +177,11 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label small fw-semibold">Ou importer une archive externe (.zip clé USB)</label>
+                <label class="form-label">Ou importer une archive externe (.zip clé USB)</label>
                 <input type="file" name="backup_zip" class="form-control form-control-sm" accept=".zip">
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold text-danger">Tapez RESTAURER *</label>
+                <label class="form-label text-danger">Tapez RESTAURER *</label>
                 <input type="text" name="confirm_word" class="form-control form-control-sm" required placeholder="RESTAURER">
             </div>
             <div class="col-md-2">

@@ -1,18 +1,19 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon %}
 {% block title %}Permissions effectives — {{ target_user.username }}{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">
+        <h1 class="yn-page-title mb-1">
             Permissions effectives & Surcharges — <code>{{ target_user.username }}</code> ({{ target_user.full_name }})
         </h1>
-        <small class="text-muted">
-            Inspection complète des droits cumulés par rôles et des exceptions individuelles explicitement tracées (§6 & §10.5 RBAC)
-        </small>
+        <p class="text-muted small mb-0">
+            Inspection complète des droits cumulés par rôles et des exceptions individuelles explicitement tracées.
+        </p>
     </div>
     <a href="{{ url_for('rbac_admin.index', tab='users') }}" class="btn btn-sm btn-outline-secondary">
-        ← Retour à la gestion RBAC
+        {{ icon('chevron-left', 14) }} Retour à la gestion RBAC
     </a>
 </div>
 
@@ -26,14 +27,17 @@
     <!-- Attribution des rôles et périmètre multi-établissements -->
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header fw-semibold">Rôles attribués & Périmètre d'accès</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('shield-check', 17) }}
+                <span>Rôles attribués & Périmètre d'accès</span>
+            </div>
             <div class="card-body">
                 {% if can_edit_target %}
                 <form method="post" action="{{ url_for('rbac_admin.update_user_roles_and_scope', user_id=target_user.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_scopes" value="1">
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Rôles RBAC cumulés :</label>
+                        <label class="form-label">Rôles RBAC cumulés :</label>
                         {% set assigned_rids = target_user.user_roles | map(attribute='role_id') | list %}
                         <div class="border rounded p-2 bg-light">
                             {% for r in all_roles if (user_is_super_admin or r.code != 'SUPER_ADMIN') %}
@@ -41,7 +45,7 @@
                                 <input class="form-check-input" type="checkbox" name="role_ids[]" value="{{ r.id }}"
                                        id="ur_{{ r.id }}" {% if r.id in assigned_rids %}checked{% endif %}>
                                 <label class="form-check-label small" for="ur_{{ r.id }}">
-                                    <strong>{{ r.name }}</strong> <code class="text-muted">({{ r.code }})</code>
+                                    <strong>{{ r.name }}</strong> <code>{{ r.code }}</code>
                                     {% if not r.is_active %}<span class="text-danger">(Rôle inactif)</span>{% endif %}
                                 </label>
                             </div>
@@ -51,7 +55,7 @@
 
                     {% if user_is_super_admin %}
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Établissement principal :</label>
+                        <label class="form-label">Établissement principal :</label>
                         <select name="establishment_id" class="form-select form-select-sm mb-2">
                             {% for est in establishments %}
                             <option value="{{ est.id }}" {% if target_user.establishment_id == est.id %}selected{% endif %}>
@@ -62,7 +66,7 @@
 
                         {% if (establishments | length) > 1 %}
                         {% set extra_est_ids = target_user.establishment_scopes | map(attribute='establishment_id') | list %}
-                        <label class="form-label small fw-semibold">Établissements secondaires autorisés :</label>
+                        <label class="form-label">Établissements secondaires autorisés :</label>
                         <div class="border rounded p-2 bg-light">
                             {% for est in establishments %}
                             <div class="form-check">
@@ -80,8 +84,8 @@
                     {% endif %}
 
                     {% if available_classes %}
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Classes affectées (si Enseignant) :</label>
+                    <div class="mb-3">
+                        <label class="form-label">Classes affectées (si Enseignant) :</label>
                         {% set assigned_cids = target_user.class_assignments | map(attribute='class_id') | list %}
                         <div class="border rounded p-2 bg-light" style="max-height: 110px; overflow-y: auto;">
                             {% for cls in available_classes %}
@@ -97,7 +101,7 @@
 
                     {% if available_students %}
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Enfants rattachés (si Parent / Tuteur) :</label>
+                        <label class="form-label">Enfants rattachés (si Parent / Tuteur) :</label>
                         {% set linked_sids = target_user.parent_links | map(attribute='student_id') | list %}
                         <div class="border rounded p-2 bg-light" style="max-height: 110px; overflow-y: auto;">
                             {% for st in available_students %}
@@ -111,7 +115,9 @@
                     </div>
                     {% endif %}
 
-                    <button type="submit" class="btn btn-sm btn-primary">Mettre à jour les rôles et le périmètre</button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        {{ icon('check', 14) }} Mettre à jour les rôles et le périmètre
+                    </button>
                 </form>
                 {% else %}
                 <div class="mb-2">
@@ -124,7 +130,7 @@
                 </div>
                 <div class="small text-muted">
                     {% if target_user.id == current_user.id %}
-                    Sécurité anti-auto-élévation (§12) : vous ne pouvez pas modifier vos propres rôles ni vos propres surcharges.
+                    Sécurité anti-auto-élévation : vous ne pouvez pas modifier vos propres rôles ni vos propres surcharges.
                     {% else %}
                     Consultation en lecture seule.
                     {% endif %}
@@ -134,15 +140,17 @@
         </div>
     </div>
 
-    <!-- Surcharges individuelles exceptionnelles (§6) -->
+    <!-- Surcharges individuelles exceptionnelles -->
     <div class="col-lg-6">
-        <div class="card h-100 border-warning">
-            <div class="card-header bg-warning bg-opacity-25 fw-semibold d-flex justify-content-between align-items-center">
-                <span>Surcharges individuelles exceptionnelles</span>
-                <span class="badge text-bg-dark">{{ target_user.permission_overrides | length }} active(s)</span>
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="d-flex align-items-center gap-2">
+                    {{ icon('sliders', 17) }} Surcharges individuelles exceptionnelles
+                </span>
+                <span class="badge text-bg-warning">{{ target_user.permission_overrides | length }} active(s)</span>
             </div>
             <div class="card-body">
-                <p class="small text-muted mb-2">
+                <p class="small text-muted mb-3">
                     Une surcharge <strong>ALLOW</strong> accorde explicitement une permission hors rôle ; une surcharge <strong>DENY</strong> la révoque impérativement même si un rôle l'accorde (<em>DENY prime toujours sur ALLOW</em>).
                 </p>
 
@@ -167,7 +175,9 @@
                         <input type="text" name="reason" class="form-control form-control-sm" placeholder="Motif obligatoire (audit)" required>
                     </div>
                     <div class="col-12">
-                        <button type="submit" class="btn btn-sm btn-warning w-100 fw-semibold">Appliquer la surcharge auditée</button>
+                        <button type="submit" class="btn btn-sm btn-primary w-100">
+                            Appliquer la surcharge auditée
+                        </button>
                     </div>
                 </form>
                 {% endif %}
@@ -199,7 +209,7 @@
                                 <td class="text-end">
                                     <form method="post" action="{{ url_for('rbac_admin.delete_user_override', override_id=ov.id) }}" class="m-0">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2">✕</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">Retirer</button>
                                     </form>
                                 </td>
                                 {% endif %}
@@ -218,20 +228,26 @@
 
 <!-- Tableau complet des permissions effectives résultantes -->
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="yn-table-toolbar">
         <span class="fw-semibold">Résultat effectif du moteur d'autorisation centralisé</span>
-        <span class="badge text-bg-success">{{ effective_codes | length }} / {{ all_perms | length }} permissions accordées</span>
+        <div class="d-flex align-items-center gap-2">
+            <div class="yn-search-box" style="min-width: 210px;">
+                {{ icon('search', 14) }}
+                <input type="search" class="form-control form-control-sm" placeholder="Filtrer une permission…" data-yn-table-filter="#effective-perms-table">
+            </div>
+            <span class="badge text-bg-success yn-tabular">{{ effective_codes | length }} / {{ all_perms | length }} accordées</span>
+        </div>
     </div>
     <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle mb-0">
-            <thead class="table-light">
+        <table class="table table-sm table-hover align-middle mb-0" id="effective-perms-table">
+            <thead>
                 <tr>
-                    <th>Module</th>
-                    <th>Code permission</th>
+                    <th class="yn-sortable">Module</th>
+                    <th class="yn-sortable">Code permission</th>
                     <th>Action</th>
                     <th>Description</th>
                     <th>Origine</th>
-                    <th class="text-center">État effectif</th>
+                    <th class="text-center yn-sortable">État effectif</th>
                 </tr>
             </thead>
             <tbody>
@@ -241,11 +257,11 @@
                 <tr>
                     <td class="small fw-semibold">{{ p.module_label }}</td>
                     <td><code>{{ p.code }}</code></td>
-                    <td><span class="badge text-bg-light border text-dark">{{ p.action }}</span></td>
+                    <td><span class="badge text-bg-secondary">{{ p.action }}</span></td>
                     <td class="small text-muted">{{ p.description }}</td>
                     <td class="small">
                         {% if ov %}
-                            <span class="badge text-bg-warning text-dark">Surcharge {{ ov.effect }}</span>
+                            <span class="badge text-bg-warning">Surcharge {{ ov.effect }}</span>
                         {% elif granted %}
                             <span class="text-muted">Rôle(s) actif(s)</span>
                         {% else %}

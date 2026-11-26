@@ -1,30 +1,34 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Journaux de sécurité & Diagnostic{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Journaux d'audit et diagnostic technique</h1>
-        <small class="text-muted">Traçabilité en lecture seule des opérations sensibles, accès refusés et changements RBAC (§9 RBAC & §17 CdC)</small>
+        <h1 class="yn-page-title mb-1">Journaux d'audit et diagnostic technique</h1>
+        <p class="text-muted small mb-0">Traçabilité immuable des opérations sensibles, accès refusés, changements RBAC et état du moteur SQLite.</p>
     </div>
     {% if can_export_audit %}
-    <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-success">
-        Exporter le journal (.csv)
+    <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-secondary">
+        {{ icon('download', 15) }} Exporter le journal (.csv)
     </a>
     {% endif %}
 </div>
 
 <!-- Bloc diagnostic système et multiposte -->
 <div class="card mb-4">
-    <div class="card-header">Informations techniques et répertoires</div>
+    <div class="card-header d-flex align-items-center gap-2">
+        {{ icon('activity', 17) }}
+        <span>Informations techniques et répertoires</span>
+    </div>
     <div class="card-body small">
         <div class="row g-3">
             <div class="col-md-6">
-                <div><strong>Version application :</strong> v{{ app_version }} (Schéma v{{ schema_version }})</div>
-                <div><strong>Mode serveur actif :</strong> {{ server_mode | upper }}</div>
-                <div><strong>Journal SQLite :</strong> <code>{{ journal_mode }}</code> • Intégrité : <strong>{{ db_msg | upper }}</strong></div>
+                <div class="mb-1"><strong>Version application :</strong> v{{ app_version }} (Schéma v{{ schema_version }})</div>
+                <div class="mb-1"><strong>Mode serveur actif :</strong> <span class="badge text-bg-primary">{{ server_mode | upper }}</span></div>
+                <div class="mb-1"><strong>Journal SQLite :</strong> <code>{{ journal_mode }}</code> · Intégrité : <strong class="text-success">{{ db_msg | upper }}</strong></div>
                 {% if lan_ips %}
-                <div class="mt-1">
+                <div class="mt-2">
                     <strong>Adresse(s) réseau local pour postes clients (multiposte) :</strong>
                     {% for ip in lan_ips %}
                         <code>http://{{ ip }}:5000</code>{% if not loop.last %}, {% endif %}
@@ -33,8 +37,8 @@
                 {% endif %}
             </div>
             <div class="col-md-6">
-                <div><strong>Dossier programme :</strong> <code>{{ paths.program_root }}</code></div>
-                <div><strong>Dossier données indépendant :</strong> <code>{{ paths.data_dir }}</code></div>
+                <div class="mb-1"><strong>Dossier programme :</strong> <code>{{ paths.program_root }}</code></div>
+                <div class="mb-1"><strong>Dossier données indépendant :</strong> <code>{{ paths.data_dir }}</code></div>
                 <div><strong>Fichier SQLite :</strong> <code>{{ paths.db_path }}</code></div>
             </div>
         </div>
@@ -42,9 +46,16 @@
 </div>
 
 <div class="card">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span>Journal des opérations sensibles ({{ logs | length }} dernières entrées — lecture seule)</span>
-        <form method="get" action="{{ url_for('admin.audit_logs_view') }}" class="d-flex flex-wrap gap-2">
+    <div class="yn-table-toolbar">
+        <span class="fw-semibold d-flex align-items-center gap-2">
+            {{ icon('shield-check', 17) }}
+            <span>Journal des opérations sensibles ({{ logs | length }} entrées)</span>
+        </span>
+        <form method="get" action="{{ url_for('admin.audit_logs_view') }}" class="d-flex flex-wrap gap-2 align-items-center m-0">
+            <div class="yn-search-box" style="min-width: 190px;">
+                {{ icon('search', 14) }}
+                <input type="search" class="form-control form-control-sm" placeholder="Rechercher texte…" data-yn-table-filter="#audit-table">
+            </div>
             <select name="module" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
                 <option value="">— Tous les modules —</option>
                 {% for mod in distinct_modules %}
@@ -66,41 +77,45 @@
         </form>
     </div>
     <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0" id="audit-table">
             <thead>
                 <tr>
-                    <th>Horodatage (UTC)</th>
-                    <th>Utilisateur</th>
+                    <th class="yn-sortable">Horodatage (UTC)</th>
+                    <th class="yn-sortable">Utilisateur</th>
                     <th>Profil</th>
-                    <th>Module</th>
-                    <th>Action</th>
-                    <th>Résultat</th>
+                    <th class="yn-sortable">Module</th>
+                    <th class="yn-sortable">Action</th>
+                    <th class="yn-sortable">Résultat</th>
                     <th>IP</th>
                     <th>Description</th>
                 </tr>
             </thead>
             <tbody>
                 {% for lg in logs %}
-                <tr class="{% if lg.status == 'DENIED' or lg.status == 'FAILURE' %}table-warning{% endif %}">
-                    <td class="small text-nowrap">{{ lg.created_at | datetime_fr }}</td>
+                <tr>
+                    <td class="small text-nowrap yn-tabular">{{ lg.created_at | datetime_fr }}</td>
                     <td><code>{{ lg.username_snapshot }}</code></td>
                     <td class="small">{{ lg.role_snapshot or '—' }}</td>
                     <td class="small"><code>{{ lg.module or 'general' }}</code></td>
-                    <td><span class="badge text-bg-light border text-dark">{{ lg.action }}</span></td>
+                    <td><span class="badge text-bg-secondary">{{ lg.action }}</span></td>
                     <td>
                         {% if lg.status == 'DENIED' %}
                             <span class="badge text-bg-danger">REFUSÉ</span>
                         {% elif lg.status == 'FAILURE' %}
-                            <span class="badge text-bg-warning text-dark">ÉCHEC</span>
+                            <span class="badge text-bg-warning">ÉCHEC</span>
                         {% else %}
                             <span class="badge text-bg-success">SUCCÈS</span>
                         {% endif %}
                     </td>
-                    <td class="small text-muted">{{ lg.ip_address or '—' }}</td>
+                    <td class="small text-muted yn-tabular">{{ lg.ip_address or '—' }}</td>
                     <td class="small">{{ lg.summary }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="text-center py-4 text-muted">Aucune entrée dans le journal.</td></tr>
+                <tr>
+                    <td colspan="8">
+                        {{ empty_state('shield-check', 'Aucune entrée dans le journal', 'Aucun événement ne correspond aux filtres sélectionnés.') }}
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>

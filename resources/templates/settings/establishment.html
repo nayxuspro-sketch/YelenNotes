@@ -1,27 +1,34 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Paramètres de l'établissement{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 fw-bold mb-0">Paramètres généraux de l'établissement</h1>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+    <div>
+        <h1 class="yn-page-title mb-1">Paramètres généraux de l'établissement</h1>
+        <p class="text-muted small mb-0">Configurez l'identité officielle figurant sur tous vos relevés, tableaux synoptiques et bulletins PDF.</p>
+    </div>
 </div>
 
 <div class="row g-4">
     <div class="col-lg-8">
         <div class="card">
-            <div class="card-header">Identité officielle (en-tête des relevés et bulletins)</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('building-2', 17) }}
+                <span>Identité officielle & paramètres système</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('settings.establishment') }}" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-5">
-                            <label class="form-label fw-semibold" for="country">Pays</label>
+                            <label class="form-label" for="country">Pays <span class="text-danger">*</span></label>
                             <input type="text" id="country" name="country" class="form-control"
                                    value="{{ settings.country }}" {% if not can_edit %}disabled{% endif %} required>
                         </div>
                         <div class="col-md-7">
-                            <label class="form-label fw-semibold" for="motto">Devise nationale / officielle</label>
+                            <label class="form-label" for="motto">Devise nationale / officielle</label>
                             <input type="text" id="motto" name="motto" class="form-control"
                                    value="{{ settings.motto }}" {% if not can_edit %}disabled{% endif %}>
                         </div>
@@ -29,19 +36,19 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="ceb">Circonscription d'Éducation de Base (CEB)</label>
+                            <label class="form-label" for="ceb">Circonscription d'Éducation de Base (CEB)</label>
                             <input type="text" id="ceb" name="ceb" class="form-control"
                                    value="{{ settings.ceb }}" placeholder="ex. CEB de Ouagadougou I" {% if not can_edit %}disabled{% endif %}>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="school_code">Code établissement (facultatif)</label>
+                            <label class="form-label" for="school_code">Code établissement (facultatif)</label>
                             <input type="text" id="school_code" name="school_code" class="form-control"
                                    value="{{ settings.school_code or '' }}" {% if not can_edit %}disabled{% endif %}>
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="school_name">Nom complet de l'établissement *</label>
+                        <label class="form-label" for="school_name">Nom complet de l'établissement <span class="text-danger">*</span></label>
                         <input type="text" id="school_name" name="school_name" class="form-control"
                                value="{{ settings.school_name }}" placeholder="ex. École Primaire Publique de Dassasgho A"
                                {% if not can_edit %}disabled{% endif %} required>
@@ -71,9 +78,11 @@
                                value="{{ settings.address or '' }}" {% if not can_edit %}disabled{% endif %}>
                     </div>
 
+                    <hr class="my-3">
+
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="active_school_year_id">Année scolaire active par défaut</label>
+                            <label class="form-label" for="active_school_year_id">Année scolaire active par défaut</label>
                             <select id="active_school_year_id" name="active_school_year_id" class="form-select" {% if not can_edit %}disabled{% endif %}>
                                 <option value="">— Aucune année sélectionnée —</option>
                                 {% for yr in years %}
@@ -85,7 +94,7 @@
                         </div>
                         {% if can_perm('settings.manage') %}
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold" for="session_timeout_minutes">Déconnexion après inactivité (minutes)</label>
+                            <label class="form-label" for="session_timeout_minutes">Déconnexion après inactivité (minutes)</label>
                             <input type="number" id="session_timeout_minutes" name="session_timeout_minutes"
                                    class="form-control" min="5" max="480" value="{{ settings.session_timeout_minutes }}">
                         </div>
@@ -94,7 +103,7 @@
 
                     {% if can_edit %}
                     <div class="mb-4">
-                        <label class="form-label fw-semibold" for="logo_file">Logo de l'établissement (PNG ou JPG, facultatif)</label>
+                        <label class="form-label" for="logo_file">Logo officiel de l'établissement (PNG ou JPG)</label>
                         <input type="file" id="logo_file" name="logo_file" class="form-control" accept="image/png,image/jpeg">
                         {% if settings.logo_filename %}
                         <div class="form-check mt-2">
@@ -106,7 +115,9 @@
                         {% endif %}
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Enregistrer les paramètres</button>
+                    <button type="submit" class="btn btn-primary">
+                        {{ icon('check', 16) }} Enregistrer les paramètres
+                    </button>
                     {% endif %}
                 </form>
             </div>
@@ -115,14 +126,17 @@
 
     <div class="col-lg-4">
         <div class="card">
-            <div class="card-header">Aperçu du logo actuel</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('award', 17) }}
+                <span>Aperçu du logo officiel</span>
+            </div>
             <div class="card-body text-center">
                 {% if settings.logo_filename %}
                     <img src="{{ url_for('settings.school_logo') }}" alt="Logo établissement"
-                         class="img-fluid border rounded p-2 mb-2" style="max-height: 150px;">
-                    <div class="small text-muted">Ce logo figurera automatiquement sur les relevés et bulletins PDF.</div>
+                         class="img-fluid border rounded p-3 mb-2 bg-white" style="max-height: 150px;">
+                    <div class="small text-muted">Ce logo s'imprime automatiquement en en-tête des relevés et bulletins PDF.</div>
                 {% else %}
-                    <div class="py-4 text-muted small">Aucun logo enregistré.</div>
+                    {{ empty_state('building-2', 'Aucun logo importé', 'Importez un fichier PNG ou JPG pour personnaliser vos documents officiels.') }}
                 {% endif %}
             </div>
         </div>

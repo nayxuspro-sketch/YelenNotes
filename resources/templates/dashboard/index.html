@@ -1,216 +1,514 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Tableau de bord{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<!-- En-tête de l'espace de travail -->
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
     <div>
-        <h1 class="h4 fw-bold mb-0">Tableau de bord</h1>
-        <small class="text-muted">
+        <h1 class="yn-page-title mb-1">
+            {{ settings.school_name or "Tableau de bord de l'établissement" }}
+        </h1>
+        <p class="text-muted mb-0 small">
             {% if selected_year %}
-                Année scolaire consultée : <strong>{{ selected_year.label }}</strong>
-                <span class="badge {% if selected_year.status == 'CLOTUREE' %}text-bg-secondary{% else %}text-bg-success{% endif %} ms-1">
-                    {{ selected_year.status }}
-                </span>
+                Année scolaire <strong>{{ selected_year.label }}</strong>
+                <span class="mx-1">·</span>
+                {% if selected_year.status == 'CLOTUREE' %}
+                    <span class="badge text-bg-secondary">Année clôturée — Lecture seule</span>
+                {% else %}
+                    <span class="badge text-bg-success">Année en cours</span>
+                {% endif %}
             {% else %}
-                Aucune année scolaire configurée pour le moment
+                Bienvenue dans Yelen Notes — Initialisez votre établissement et votre première année scolaire.
             {% endif %}
-        </small>
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if can_perm('grades.view') %}
+        <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id if selected_class else None) }}" class="btn btn-primary btn-sm">
+            {{ icon('pen-line', 15) }} Saisie des notes
+        </a>
+        {% endif %}
+        {% if can_perm('bulletins.view') %}
+        <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id if selected_class else None) }}" class="btn btn-outline-secondary btn-sm">
+            {{ icon('file-text', 15) }} Bulletins PDF
+        </a>
+        {% endif %}
+        {% if has_any_perm('settings.update', 'settings.manage') %}
+        <a href="{{ url_for('admin.backups_manage') }}" class="btn btn-outline-secondary btn-sm">
+            {{ icon('database', 15) }} Sauvegarde
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Assistant d'initialisation (affiché tant que la mise en route n'est pas complète) -->
+{% if not setup_complete %}
+{% set done_count = setup_steps | selectattr('done') | list | length %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            {{ icon('layers', 17) }}
+            <span>Guide de mise en route</span>
+        </div>
+        <span class="badge text-bg-primary yn-tabular">
+            {{ done_count }} / {{ setup_steps | length }} étapes complétées
+        </span>
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-2">
+            {% for step in setup_steps %}
+            <div class="col-md-6 col-xl">
+                <a href="{{ step.url }}" class="text-decoration-none d-block h-100 p-2 rounded border {% if step.done %}bg-light{% endif %}">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        {% if step.done %}
+                        <span class="badge text-bg-success">{{ icon('check', 12) }}</span>
+                        {% else %}
+                        <span class="badge text-bg-warning">{{ loop.index }}</span>
+                        {% endif %}
+                        <span class="small fw-semibold {% if step.done %}text-muted{% endif %}">{{ step.title }}</span>
+                    </div>
+                    <div class="small text-muted" style="font-size: 0.76rem;">{{ step.desc }}</div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Alertes contextuelles importantes -->
+{% if dashboard_alerts %}
+<div class="mb-4">
+    {% for al in dashboard_alerts %}
+    <div class="alert alert-{{ al.level }} py-2 px-3 mb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2">
+            {% if al.level == 'warning' %}{{ icon('alert-triangle', 16) }}{% else %}{{ icon('info', 16) }}{% endif %}
+            <div>
+                <strong>{{ al.title }}</strong>
+                {% if al.detail %}<span class="ms-1 small opacity-75">— {{ al.detail }}</span>{% endif %}
+            </div>
+        </div>
+        {% if al.url %}
+        <a href="{{ al.url }}" class="btn btn-sm btn-outline-secondary py-1">Ouvrir {{ icon('chevron-right', 13) }}</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- ======================================================================
+     CARTES DE SYNTHÈSE KPI (§5 — Adaptées aux permissions RBAC)
+     ====================================================================== -->
+{% set open_periods_count = periods | selectattr('status', 'equalto', 'OUVERTE') | list | length %}
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 {% if financial_summary %}col-xl{% else %}col-xl-3{% endif %}">
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Effectif actif</span>
+                <span class="yn-kpi-icon tone-blue">{{ icon('users', 18) }}</span>
+            </div>
+            <div class="yn-kpi-value">{{ total_active_pupils }}</div>
+            <div class="yn-kpi-meta">
+                <span><strong>{{ total_boys }}</strong> Garçons ({{ boys_pct }}%)</span>
+                <span>·</span>
+                <span><strong>{{ total_girls }}</strong> Filles ({{ girls_pct }}%)</span>
+            </div>
+        </div>
     </div>
 
-    {% if accessible_classes %}
-    <form method="get" action="{{ url_for('dashboard.index') }}" class="d-flex align-items-center gap-2">
-        <label for="dash-class" class="small fw-semibold text-nowrap">Classe suivie :</label>
-        <select id="dash-class" name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
-            {% for cls in accessible_classes %}
-            <option value="{{ cls.id }}" {% if selected_class and selected_class.id == cls.id %}selected{% endif %}>
-                {{ cls.name }} ({{ cls.titulaire_name }})
-            </option>
-            {% endfor %}
-        </select>
-    </form>
+    <div class="col-sm-6 {% if financial_summary %}col-xl{% else %}col-xl-3{% endif %}">
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Classes & Périodes</span>
+                <span class="yn-kpi-icon tone-sky">{{ icon('graduation-cap', 18) }}</span>
+            </div>
+            <div class="yn-kpi-value">{{ accessible_classes | length }}</div>
+            <div class="yn-kpi-meta">
+                <span><strong>{{ periods | length }}</strong> période(s)</span>
+                <span>·</span>
+                <span><strong>{{ open_periods_count }}</strong> ouverte(s)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 {% if financial_summary %}col-xl{% else %}col-xl-3{% endif %}">
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Équipe enseignante</span>
+                <span class="yn-kpi-icon tone-navy">{{ icon('user-check', 18) }}</span>
+            </div>
+            <div class="yn-kpi-value">{{ teachers_count }}</div>
+            <div class="yn-kpi-meta">
+                <span>Compte(s) enseignant actif(s)</span>
+            </div>
+        </div>
+    </div>
+
+    {% if can_see_pedagogy %}
+    <div class="col-sm-6 {% if financial_summary %}col-xl{% else %}col-xl-3{% endif %}">
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Taux de réussite</span>
+                <span class="yn-kpi-icon tone-emerald">{{ icon('trending-up', 18) }}</span>
+            </div>
+            <div class="yn-kpi-value">
+                {% if latest_pass_rate is not none %}{{ latest_pass_rate | dec_fr(1) }}%{% else %}—{% endif %}
+            </div>
+            <div class="yn-kpi-meta">
+                {% if latest_period_label and selected_class %}
+                    <span>{{ selected_class.name }} · {{ latest_period_label }}</span>
+                {% else %}
+                    <span>En attente des notes complètes</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if financial_summary %}
+    <div class="col-sm-6 {% if can_see_pedagogy %}col-xl{% else %}col-xl-3{% endif %}">
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Situation financière</span>
+                <span class="yn-kpi-icon tone-amber">{{ icon('wallet', 18) }}</span>
+            </div>
+            <div class="yn-kpi-value yn-tabular">{{ financial_summary.solde | dec_fr(0) }} <small class="fs-6 fw-normal text-muted">FCFA</small></div>
+            <div class="yn-kpi-meta">
+                <span class="text-success yn-tabular">+{{ financial_summary.recettes | dec_fr(0) }}</span>
+                <span>·</span>
+                <span class="text-danger yn-tabular">-{{ financial_summary.depenses | dec_fr(0) }}</span>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 
-{% if not setup_complete %}
-<div class="card mb-4 border-primary">
-    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-        <span>Guide de mise en route — Configuration de l'établissement</span>
-        <span class="badge bg-light text-primary">
-            {{ setup_steps | selectattr('done') | list | length }} / {{ setup_steps | length }} étapes complétées
-        </span>
-    </div>
-    <div class="card-body">
-        <p class="small text-muted mb-3">
-            Cette base ne préconfigure aucune règle pédagogique à votre place. Complétez les étapes ci-dessous dans l'ordre :
-        </p>
-        <div class="list-group">
-            {% for step in setup_steps %}
-            <a href="{{ step.url }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="fw-semibold {% if step.done %}text-success{% endif %}">
-                        {% if step.done %}✓{% else %}○{% endif %} {{ step.title }}
-                    </div>
-                    <small class="text-muted">{{ step.desc }}</small>
-                </div>
-                <span class="badge {% if step.done %}text-bg-success{% else %}text-bg-outline border text-dark{% endif %}">
-                    {{ 'Configuré' if step.done else 'À faire →' }}
-                </span>
-            </a>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Cartes de statistiques réelles (§13 CdC) -->
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
+<!-- ======================================================================
+     GRAPHIQUES SOBRES : ÉVOLUTION DES RÉSULTATS & RÉPARTITION PAR SEXE (§5)
+     ====================================================================== -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
         <div class="card h-100">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    {{ icon('bar-chart-3', 17) }}
+                    <span>Évolution des résultats par période{% if selected_class %} — {{ selected_class.name }}{% endif %}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    {% if accessible_classes | length > 1 %}
+                    <form method="get" action="{{ url_for('dashboard.index') }}" class="m-0">
+                        <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for cls in accessible_classes %}
+                            <option value="{{ cls.id }}" {% if selected_class and selected_class.id == cls.id %}selected{% endif %}>
+                                Classe {{ cls.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+                    {% if can_perm('bulletins.view') and selected_class %}
+                    <a href="{{ url_for('reports.synoptic_report', class_id=selected_class.id) }}" class="btn btn-sm btn-outline-secondary">
+                        Synoptique {{ icon('arrow-up-right', 14) }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
             <div class="card-body">
-                <div class="text-muted small fw-semibold">Effectif total actif ({{ selected_year.label if selected_year else '—' }})</div>
-                <div class="fs-3 fw-bold mt-1">{{ total_active_pupils }}</div>
-                <div class="small text-muted">
-                    Filles : <strong>{{ total_girls }}</strong> • Garçons : <strong>{{ total_boys }}</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <div class="text-muted small fw-semibold">Classes accessibles</div>
-                <div class="fs-3 fw-bold mt-1">{{ accessible_classes | length }}</div>
-                <div class="small text-muted">
-                    {% if selected_class %}
-                        Sélectionnée : <strong>{{ selected_class.name }}</strong> ({{ selected_class_active }} élèves : {{ selected_class_girls }} F / {{ selected_class_boys }} M)
-                    {% else %}
-                        Aucune classe disponible
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <div class="text-muted small fw-semibold">Périodes d'évaluation</div>
-                <div class="fs-3 fw-bold mt-1">{{ periods | length }}</div>
-                <div class="small text-muted">
-                    Ouvertes : <strong>{{ periods | selectattr('status', 'equalto', 'OUVERTE') | list | length }}</strong> •
-                    Clôturées : <strong>{{ periods | selectattr('status', 'equalto', 'CLOTUREE') | list | length }}</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="card h-100">
-            <div class="card-body d-flex flex-column justify-content-between">
-                <div class="text-muted small fw-semibold">Accès rapides adaptés à vos permissions</div>
-                <div class="d-grid gap-1 mt-2">
-                    {% if can_perm('grades.view') %}
-                    <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-primary">
-                        Saisir / consulter les notes
-                    </a>
-                    {% endif %}
-                    {% if selected_class and can_perm('subjects.view') %}
-                    <a href="{{ url_for('academics.class_subjects', class_id=selected_class.id) }}" class="btn btn-sm btn-outline-primary">
-                        Matières & barèmes ({{ selected_class.name }})
-                    </a>
-                    {% endif %}
-                    {% if can_perm('bulletins.view') %}
-                    <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id if selected_class else None) }}" class="btn btn-sm btn-outline-secondary">
-                        Éditer les bulletins PDF
-                    </a>
-                    {% endif %}
-                    {% if can_perm('accounting.view') %}
-                    <a href="{{ url_for('operations.accounting_manage') }}" class="btn btn-sm btn-outline-success">
-                        Comptabilité scolaire
-                    </a>
-                    {% endif %}
-                    {% if can_perm('absences.view') %}
-                    <a href="{{ url_for('operations.absences_manage') }}" class="btn btn-sm btn-outline-dark">
-                        Suivi des absences
-                    </a>
-                    {% endif %}
-                    {% if can_perm('rbac.view') %}
-                    <a href="{{ url_for('rbac_admin.index') }}" class="btn btn-sm btn-outline-dark">
-                        Rôles & permissions
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% if selected_class and period_progress_cards %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Progression de la saisie des notes — Classe {{ selected_class.name }}</span>
-        <span class="small text-muted">Titulaire : {{ selected_class.titulaire_name }}</span>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Période</th>
-                    <th>Statut</th>
-                    <th style="min-width: 220px;">Avancement de la saisie</th>
-                    <th class="text-center">Élèves classés</th>
-                    <th class="text-center">Dossiers incomplets</th>
-                    <th class="text-center">Moyenne de classe</th>
-                    <th class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in period_progress_cards %}
-                <tr>
-                    <td class="fw-semibold">{{ item.period.name }} <span class="text-muted small">({{ item.period.short_code }})</span></td>
-                    <td>
-                        {% if item.period.status == 'OUVERTE' %}
-                            <span class="badge text-bg-success">OUVERTE</span>
-                        {% elif item.period.status == 'CLOTUREE' %}
-                            <span class="badge text-bg-secondary">CLÔTURÉE</span>
-                        {% else %}
-                            <span class="badge text-bg-warning">BROUILLON</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="progress flex-grow-1" style="height: 10px;">
-                                <div class="progress-bar {% if item.completion_percent == 100 %}bg-success{% else %}bg-primary{% endif %}"
-                                     style="width: {{ item.completion_percent }}%"></div>
+                {% if can_see_pedagogy and period_progress_cards %}
+                <div class="row g-4 align-items-center">
+                    <div class="col-md-5">
+                        <div class="yn-bar-chart">
+                            {% for item in period_progress_cards %}
+                            {% set pr = item.pass_rate_percent %}
+                            {% set h = pr | float if pr is not none else item.avg_height_pct %}
+                            <div class="yn-bar-col">
+                                <div class="small fw-semibold yn-tabular mb-1">
+                                    {% if pr is not none and item.ranked_count > 0 %}{{ pr | dec_fr(0) }}%{% else %}—{% endif %}
+                                </div>
+                                <div class="yn-bar-track" title="{{ item.period.name }}">
+                                    <div class="yn-bar-fill {% if pr is not none and pr >= 50 %}tone-emerald{% endif %}"
+                                         style="height: {{ h if h > 4 else 4 }}%;"></div>
+                                </div>
+                                <div class="small text-muted mt-2 text-truncate w-100 text-center" title="{{ item.period.name }}">
+                                    {{ item.period.short_code }}
+                                </div>
                             </div>
-                            <span class="small fw-semibold">{{ item.completion_percent | dec_fr(1) }} %</span>
+                            {% endfor %}
                         </div>
-                    </td>
-                    <td class="text-center">{{ item.ranked_count }}</td>
-                    <td class="text-center">
-                        {% if item.incomplete_count > 0 %}
-                            <span class="badge text-bg-warning">{{ item.incomplete_count }}</span>
-                        {% else %}
-                            <span class="text-muted">0</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-center fw-semibold">
-                        {% if item.class_average is not none %}
-                            {{ item.class_average | dec_fr(item.decimal_places) }} /{{ item.general_scale | compact_fr }}
-                        {% else %}
-                            —
-                        {% endif %}
-                    </td>
-                    <td class="text-end">
-                        <div class="btn-group btn-group-sm">
-                            <a href="{{ url_for('grades.grade_entry', class_id=selected_class.id, period_id=item.period.id) }}" class="btn btn-outline-primary">Notes</a>
-                            <a href="{{ url_for('reports.period_releve', class_id=selected_class.id, period_id=item.period.id) }}" class="btn btn-outline-secondary">Relevé</a>
-                            <a href="{{ url_for('reports.bulletins_center', class_id=selected_class.id, period_id=item.period.id, scope='PERIODE') }}" class="btn btn-outline-dark">Bulletins</a>
+                        <div class="text-center text-muted mt-2" style="font-size: 0.75rem;">
+                            Taux d'admission (%) par période évaluée
                         </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </div>
+
+                    <div class="col-md-7">
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Période</th>
+                                        <th>Statut</th>
+                                        <th>Complétude</th>
+                                        <th class="text-end">Moyenne</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in period_progress_cards %}
+                                    <tr>
+                                        <td class="fw-semibold">{{ item.period.name }}</td>
+                                        <td>
+                                            {% if item.period.status == 'CLOTUREE' %}
+                                            <span class="badge text-bg-secondary">Clôturée</span>
+                                            {% else %}
+                                            <span class="badge text-bg-success">{{ item.period.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td style="min-width: 115px;">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="progress flex-grow-1" style="height: 6px;">
+                                                    <div class="progress-bar bg-primary" style="width: {{ item.completion_percent }}%"></div>
+                                                </div>
+                                                <span class="small text-muted yn-tabular">{{ item.completion_percent | dec_fr(0) }}%</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-end fw-semibold yn-tabular">
+                                            {% if item.class_average is not none %}
+                                                {{ item.class_average | dec_fr(item.decimal_places) }} /{{ item.general_scale | compact_fr }}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% elif not can_see_pedagogy and financial_summary %}
+                <div class="py-3">
+                    <div class="row g-3 text-center">
+                        <div class="col-4">
+                            <div class="text-muted small">Écritures enregistrées</div>
+                            <div class="fs-4 fw-bold yn-tabular">{{ financial_summary.entries_count }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">En attente de validation</div>
+                            <div class="fs-4 fw-bold text-warning yn-tabular">{{ financial_summary.pending_count }}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Accès journal</div>
+                            <a href="{{ url_for('operations.accounting_manage') }}" class="btn btn-sm btn-primary mt-1">Ouvrir la comptabilité</a>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                    {{ empty_state('calendar', 'Aucune période évaluée à afficher', 'Configurez vos périodes et classes pour suivre l’évolution des résultats.', url_for('settings.periods') if can_perm('evaluations.view') else '', 'Configurer les périodes') }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Répartition par sexe (Anneau SVG vectoriel 100% hors ligne) -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('users', 17) }}
+                <span>Répartition par sexe</span>
+            </div>
+            <div class="card-body d-flex flex-column justify-content-center">
+                {% if total_active_pupils > 0 %}
+                <div class="d-flex align-items-center justify-content-center gap-4 py-2">
+                    <div class="position-relative d-inline-flex align-items-center justify-content-center" style="width: 126px; height: 126px;">
+                        <svg viewBox="0 0 36 36" width="126" height="126" style="transform: rotate(-90deg);">
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="var(--yn-border)" stroke-width="3.6"></circle>
+                            {% if girls_pct > 0 %}
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#059669" stroke-width="3.6"
+                                    stroke-dasharray="100 0"></circle>
+                            {% endif %}
+                            {% if boys_pct > 0 %}
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#2563eb" stroke-width="3.6"
+                                    stroke-dasharray="{{ boys_pct }} {{ 100 - boys_pct }}"></circle>
+                            {% endif %}
+                        </svg>
+                        <div class="position-absolute text-center">
+                            <div class="fw-bold fs-5 yn-tabular">{{ total_active_pupils }}</div>
+                            <div class="text-muted" style="font-size: 0.7rem;">Élèves</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column gap-3">
+                        <div>
+                            <div class="d-flex align-items-center gap-2 small text-muted">
+                                <span style="width:10px;height:10px;border-radius:3px;background:#2563eb;display:inline-block;"></span>
+                                Garçons (M)
+                            </div>
+                            <div class="fw-bold yn-tabular">{{ total_boys }} <span class="text-muted fw-normal small">({{ boys_pct }}%)</span></div>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2 small text-muted">
+                                <span style="width:10px;height:10px;border-radius:3px;background:#059669;display:inline-block;"></span>
+                                Filles (F)
+                            </div>
+                            <div class="fw-bold yn-tabular">{{ total_girls }} <span class="text-muted fw-normal small">({{ girls_pct }}%)</span></div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                    {{ empty_state('user-plus', 'Aucun élève inscrit', 'Inscrivez ou importez vos élèves depuis un fichier Excel.', url_for('students.students_list') if has_any_perm('students.view', 'enrollments.view') else '', 'Gérer les élèves') }}
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
-{% endif %}
+
+<!-- ======================================================================
+     APERÇU DES CLASSES, RACCOURCIS MÉTIER & ACTIVITÉS RÉCENTES (§5)
+     ====================================================================== -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="yn-table-toolbar">
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                    {{ icon('graduation-cap', 17) }}
+                    <span>Classes pédagogiques accessibles ({{ accessible_classes | length }})</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    {% if accessible_classes | length > 4 %}
+                    <div class="yn-search-box" style="min-width: 190px;">
+                        {{ icon('search', 14) }}
+                        <input type="search" class="form-control form-control-sm" placeholder="Filtrer une classe…" data-yn-table-filter="#dashboard-classes-table">
+                    </div>
+                    {% endif %}
+                    {% if can_perm('classes.view') %}
+                    <a href="{{ url_for('academics.classes_list') }}" class="btn btn-sm btn-outline-secondary">Gérer les classes</a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if accessible_classes %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle" id="dashboard-classes-table">
+                    <thead>
+                        <tr>
+                            <th class="yn-sortable">Classe</th>
+                            <th class="yn-sortable">Titulaire</th>
+                            <th class="text-center yn-sortable">Effectif actif</th>
+                            <th class="text-center yn-sortable">Matières</th>
+                            <th class="text-end">Accès direct</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cls in accessible_classes %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ cls.name }}</div>
+                                {% if cls.level_label %}<div class="text-muted small">Niveau {{ cls.level_label }}</div>{% endif %}
+                            </td>
+                            <td class="text-muted">{{ cls.titulaire_name or "—" }}</td>
+                            <td class="text-center">
+                                <span class="badge text-bg-primary yn-tabular">{{ cls.enrollments | selectattr('is_active') | list | length }}</span>
+                            </td>
+                            <td class="text-center yn-tabular">{{ cls.subjects | selectattr('is_active') | list | length }}</td>
+                            <td class="text-end">
+                                <div class="d-inline-flex flex-wrap justify-content-end gap-1">
+                                    {% if can_perm('subjects.view') %}
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('academics.class_subjects', class_id=cls.id) }}">Matières</a>
+                                    {% endif %}
+                                    {% if can_perm('grades.view') %}
+                                    <a class="btn btn-sm btn-primary" href="{{ url_for('grades.grade_entry', class_id=cls.id) }}">Notes</a>
+                                    {% endif %}
+                                    {% if can_perm('bulletins.view') %}
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('reports.bulletins_center', class_id=cls.id) }}">Bulletins</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="card-body">
+                {{ empty_state('graduation-cap', 'Aucune classe créée pour cette année scolaire', 'Créez vos classes pédagogiques pour configurer leurs matières et inscrire vos élèves.', url_for('academics.classes_list') if can_perm('classes.view') else '', 'Créer une classe') }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-lg-4 d-flex flex-column gap-4">
+        <!-- Raccourcis vers les opérations fréquentes (filtrés par RBAC) -->
+        <div class="card">
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('sliders', 17) }}
+                <span>Opérations fréquentes</span>
+            </div>
+            <div class="list-group list-group-flush small">
+                {% if has_any_perm('students.view', 'enrollments.view') %}
+                <a href="{{ url_for('students.students_list') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('user-plus', 15) }} Inscrire ou importer des élèves</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                {% endif %}
+                {% if can_perm('grades.view') %}
+                <a href="{{ url_for('grades.grade_entry') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('pen-line', 15) }} Grille de saisie des notes</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                {% endif %}
+                {% if can_perm('bulletins.view') %}
+                <a href="{{ url_for('reports.period_releve') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('file-spreadsheet', 15) }} Relevés & Classement de mérite</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                <a href="{{ url_for('reports.synoptic_report') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('bar-chart-3', 15) }} Tableau synoptique officiel</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                {% endif %}
+                {% if can_perm('proposition.view') %}
+                <a href="{{ url_for('reports.end_of_year_proposition') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('award', 15) }} Proposition de fin d'année</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                {% endif %}
+                {% if can_perm('accounting.view') %}
+                <a href="{{ url_for('operations.accounting_manage') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+                    <span class="d-flex align-items-center gap-2">{{ icon('wallet', 15) }} Suivi des frais & versements</span>
+                    {{ icon('chevron-right', 14) }}
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Activités récentes -->
+        <div class="card flex-grow-1">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="d-flex align-items-center gap-2">{{ icon('activity', 17) }} Activités récentes</span>
+                {% if can_perm('audit.view') %}
+                <a href="{{ url_for('admin.audit_logs_view') }}" class="small text-decoration-none">Tout voir</a>
+                {% endif %}
+            </div>
+            {% if recent_activities %}
+            <div class="list-group list-group-flush small">
+                {% for act in recent_activities %}
+                <div class="list-group-item py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">{{ act.username_snapshot or "Système" }}</span>
+                        <span class="text-muted yn-tabular" style="font-size: 0.72rem;">{{ act.created_at.strftime('%d/%m %H:%M') }}</span>
+                    </div>
+                    <div class="text-muted text-truncate" title="{{ act.summary or act.action }}">
+                        <code>{{ act.action }}</code> · {{ act.summary }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="card-body py-4 text-center text-muted small">
+                Aucune activité enregistrée récemment.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}

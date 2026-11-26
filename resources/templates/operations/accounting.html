@@ -1,63 +1,78 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Comptabilité scolaire{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Comptabilité scolaire & Suivi des paiements</h1>
-        <small class="text-muted">Séparation stricte des responsabilités financières et pédagogiques via <code>accounting.*</code> (§1.3 & §3.6 RBAC)</small>
+        <h1 class="yn-page-title mb-1">Comptabilité scolaire & Suivi des paiements</h1>
+        <p class="text-muted small mb-0">Gestion rigoureuse des recettes, règlements de scolarité, cotisations et dépenses de fonctionnement.</p>
     </div>
-    {% if can_export %}
-    <a href="{{ url_for('operations.accounting_export_csv') }}" class="btn btn-sm btn-outline-success">
-        Exporter les écritures (.csv)
-    </a>
-    {% endif %}
+    <div class="d-flex gap-2">
+        {% if can_export %}
+        <a href="{{ url_for('operations.accounting_export_csv') }}" class="btn btn-sm btn-outline-secondary">
+            {{ icon('download', 15) }} Exporter les écritures (.csv)
+        </a>
+        {% endif %}
+        <button type="button" class="btn btn-sm btn-outline-secondary no-print" onclick="window.print();">
+            {{ icon('printer', 15) }} Imprimer le journal
+        </button>
+    </div>
 </div>
 
-<!-- Synthèse financière -->
+<!-- Synthèse financière KPI -->
 <div class="row g-3 mb-4">
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-body py-2">
-                <div class="small text-muted fw-semibold">Total recettes (FCFA)</div>
-                <div class="fs-4 fw-bold text-success">{{ total_recettes | dec_fr(2) }}</div>
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Total recettes (FCFA)</span>
+                <span class="yn-kpi-icon tone-emerald">{{ icon('trending-up', 18) }}</span>
             </div>
+            <div class="yn-kpi-value text-success yn-tabular">{{ total_recettes | dec_fr(2) }}</div>
+            <div class="yn-kpi-meta">Encaissements et règlements enregistrés</div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-body py-2">
-                <div class="small text-muted fw-semibold">Total dépenses (FCFA)</div>
-                <div class="fs-4 fw-bold text-danger">{{ total_depenses | dec_fr(2) }}</div>
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Total dépenses (FCFA)</span>
+                <span class="yn-kpi-icon tone-amber">{{ icon('wallet', 18) }}</span>
             </div>
+            <div class="yn-kpi-value text-danger yn-tabular">{{ total_depenses | dec_fr(2) }}</div>
+            <div class="yn-kpi-meta">Charges et dépenses de fonctionnement</div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-body py-2">
-                <div class="small text-muted fw-semibold">Solde net (FCFA)</div>
-                <div class="fs-4 fw-bold text-primary">{{ solde | dec_fr(2) }}</div>
+        <div class="yn-kpi-card">
+            <div class="yn-kpi-top">
+                <span class="yn-kpi-label">Solde net disponible (FCFA)</span>
+                <span class="yn-kpi-icon tone-blue">{{ icon('bar-chart-3', 18) }}</span>
             </div>
+            <div class="yn-kpi-value text-primary yn-tabular">{{ solde | dec_fr(2) }}</div>
+            <div class="yn-kpi-meta">Balance nette de trésorerie</div>
         </div>
     </div>
 </div>
 
 <div class="row g-4">
     {% if can_create %}
-    <div class="col-xl-4">
+    <div class="col-xl-4 no-print">
         <div class="card">
-            <div class="card-header fw-semibold">Nouvelle écriture comptable</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('plus', 17) }}
+                <span>Nouvelle écriture comptable</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('operations.accounting_manage') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="create">
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label small fw-semibold">Date *</label>
+                            <label class="form-label">Date <span class="text-danger">*</span></label>
                             <input type="date" name="entry_date" class="form-control form-control-sm" value="{{ today_iso }}" required>
                         </div>
                         <div class="col-6">
-                            <label class="form-label small fw-semibold">Catégorie *</label>
+                            <label class="form-label">Catégorie <span class="text-danger">*</span></label>
                             <select name="entry_type" class="form-select form-select-sm">
                                 <option value="PAIEMENT">Paiement scolarité / APE</option>
                                 <option value="RECETTE">Autre recette</option>
@@ -65,19 +80,21 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Référence reçu / pièce *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Référence reçu / pièce <span class="text-danger">*</span></label>
                         <input type="text" name="reference" class="form-control form-control-sm" required placeholder="ex. REC-2026-004">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Libellé *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Libellé <span class="text-danger">*</span></label>
                         <input type="text" name="label" class="form-control form-control-sm" required placeholder="ex. Règlement cotisation APE">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Montant (FCFA) *</label>
+                        <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
                         <input type="number" step="0.01" min="0.01" name="amount" class="form-control form-control-sm" required>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">Enregistrer l'écriture</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        {{ icon('check', 15) }} Enregistrer l'écriture
+                    </button>
                 </form>
             </div>
         </div>
@@ -86,44 +103,55 @@
 
     <div class="{{ 'col-xl-8' if can_create else 'col-12' }}">
         <div class="card">
-            <div class="card-header fw-semibold">Journal des écritures ({{ entries | length }})</div>
+            <div class="yn-table-toolbar">
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                    {{ icon('wallet', 17) }}
+                    <span>Journal des écritures ({{ entries | length }})</span>
+                </div>
+                {% if entries | length > 3 %}
+                <div class="yn-search-box no-print">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Rechercher réf., libellé, montant…" data-yn-table-filter="#accounting-table">
+                </div>
+                {% endif %}
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="accounting-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Réf.</th>
-                            <th>Type</th>
-                            <th>Libellé</th>
-                            <th class="text-end">Montant (FCFA)</th>
-                            <th class="text-center">Statut</th>
-                            {% if can_validate or can_delete %}<th class="text-end">Actions</th>{% endif %}
+                            <th class="yn-sortable">Date</th>
+                            <th class="yn-sortable">Réf.</th>
+                            <th class="yn-sortable">Type</th>
+                            <th class="yn-sortable">Libellé</th>
+                            <th class="text-end yn-sortable">Montant (FCFA)</th>
+                            <th class="text-center yn-sortable">Statut</th>
+                            {% if can_validate or can_delete %}<th class="text-end no-print">Actions</th>{% endif %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for e in entries %}
                         <tr>
-                            <td class="small text-nowrap">{{ e.entry_date | date_fr }}</td>
+                            <td class="small text-nowrap yn-tabular">{{ e.entry_date | date_fr }}</td>
                             <td><code>{{ e.reference }}</code></td>
-                            <td><span class="badge text-bg-light border text-dark">{{ e.entry_type }}</span></td>
+                            <td><span class="badge text-bg-secondary">{{ e.entry_type }}</span></td>
                             <td class="small">{{ e.label }}</td>
-                            <td class="text-end fw-semibold small">{{ e.amount | dec_fr(2) }}</td>
+                            <td class="text-end fw-semibold small yn-tabular">{{ e.amount | dec_fr(2) }}</td>
                             <td class="text-center">
                                 {% if e.is_validated %}
                                 <span class="badge text-bg-success">Validée</span>
                                 {% else %}
-                                <span class="badge text-bg-warning text-dark">Brouillon</span>
+                                <span class="badge text-bg-warning">Brouillon</span>
                                 {% endif %}
                             </td>
                             {% if can_validate or can_delete %}
-                            <td class="text-end">
+                            <td class="text-end no-print">
                                 <div class="d-inline-flex gap-1">
                                     {% if can_validate and not e.is_validated %}
                                     <form method="post" action="{{ url_for('operations.accounting_manage') }}" class="m-0">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="action" value="validate">
                                         <input type="hidden" name="entry_id" value="{{ e.id }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2">Valider</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Valider</button>
                                     </form>
                                     {% endif %}
                                     {% if can_delete %}
@@ -132,7 +160,7 @@
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="entry_id" value="{{ e.id }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">✕</button>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
                                     </form>
                                     {% endif %}
                                 </div>
@@ -140,7 +168,11 @@
                             {% endif %}
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="text-center py-4 text-muted">Aucune écriture comptable enregistrée.</td></tr>
+                        <tr>
+                            <td colspan="7">
+                                {{ empty_state('wallet', 'Aucune écriture comptable enregistrée', 'Utilisez le formulaire ci-contre pour saisir une recette ou une dépense.') }}
+                            </td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>

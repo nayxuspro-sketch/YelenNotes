@@ -1,34 +1,37 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Classement par ordre de mérite{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3 no-print">
     <div>
-        <h1 class="h4 fw-bold mb-0">Classement par ordre de mérite</h1>
-        <small class="text-muted">Tri décroissant des moyennes, gestion des ex æquo et exclusion explicite des non-classables (§11 CdC)</small>
+        <h1 class="yn-page-title mb-1">Classement par ordre de mérite</h1>
+        <p class="text-muted small mb-0">Tri décroissant officiel des moyennes avec gestion des ex æquo et signalement des dossiers incomplets.</p>
     </div>
 
     {% if selected_class and (scope == 'ANNUEL' or selected_period) %}
     <div class="d-flex flex-wrap gap-2">
-        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">Imprimer</button>
+        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+            {{ icon('printer', 15) }} Imprimer
+        </button>
         <a href="{{ url_for('reports.merit_ranking_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope, inline=1) }}"
            target="_blank" class="btn btn-sm btn-outline-primary">
-            Aperçu PDF
+            {{ icon('file-text', 15) }} Aperçu PDF
         </a>
         <a href="{{ url_for('reports.merit_ranking_pdf', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope) }}"
            class="btn btn-sm btn-primary">
-            Télécharger PDF
+            {{ icon('download', 15) }} Télécharger PDF
         </a>
         <a href="{{ url_for('reports.merit_ranking_excel', class_id=selected_class.id, period_id=selected_period.id if selected_period else None, scope=scope) }}"
-           class="btn btn-sm btn-outline-success">
-            Exporter Excel (.xlsx)
+           class="btn btn-sm btn-outline-secondary">
+            {{ icon('file-spreadsheet', 15) }} Exporter Excel (.xlsx)
         </a>
     </div>
     {% endif %}
 </div>
 
 <div class="card mb-3 no-print">
-    <div class="card-body py-2">
+    <div class="card-body py-2 px-3">
         <form method="get" action="{{ url_for('reports.merit_ranking') }}" class="row g-2 align-items-center">
             <div class="col-md-4">
                 <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -60,80 +63,99 @@
 
 {% set res = annual_results if scope == 'ANNUEL' else period_results %}
 {% if res %}
-<div class="card">
-    <div class="card-body">
-        <div class="text-center mb-3">
-            <h2 class="h5 fw-bold mb-1">
-                CLASSEMENT PAR ORDRE DE MÉRITE — {{ res.academic_class.name }} —
-                {{ ('ANNÉE ' + res.academic_class.school_year.label) if scope == 'ANNUEL' else res.period.name }}
-            </h2>
-            <div class="small text-muted">
-                Élèves classés : <strong>{{ res.ranked_rows | length }}</strong> sur {{ res.active_rows | length }} actifs •
-                Admis (≥ moyenne) : <strong>{{ res.pass_count }}</strong> ({{ res.pass_rate_percent | dec_fr(1) }} %)
-            </div>
+<div class="yn-synoptic-sheet">
+    <div class="row align-items-center border-bottom pb-2 mb-3 text-center">
+        <div class="col-4 small">
+            <div class="fw-bold text-uppercase">{{ settings.country }}</div>
+            <div class="fst-italic">{{ settings.motto }}</div>
+            {% if settings.ceb %}<div>CEB : {{ settings.ceb }}</div>{% endif %}
         </div>
-
-        <div class="table-responsive">
-            <table class="table table-bordered align-middle">
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 60px;">N°</th>
-                        <th class="text-center" style="width: 95px;">Rang</th>
-                        <th>Nom</th>
-                        <th>Prénoms</th>
-                        <th class="text-center" style="width: 60px;">Sexe</th>
-                        {% if scope == 'ANNUEL' %}
-                            {% for p in res.periods %}
-                            <th class="text-center">{{ p.short_code }}</th>
-                            {% endfor %}
-                        {% endif %}
-                        <th class="text-center">Moyenne /{{ res.general_scale | compact_fr }}</th>
-                        <th class="text-center">Appréciation</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in res.ranked_rows %}
-                    <tr>
-                        <td class="text-center">{{ loop.index }}</td>
-                        <td class="text-center fw-bold">{{ row.rank_label }}</td>
-                        <td class="fw-semibold">{{ row.enrollment.student.last_name }}</td>
-                        <td>{{ row.enrollment.student.first_names }}</td>
-                        <td class="text-center">{{ row.enrollment.student.sex }}</td>
-                        {% if scope == 'ANNUEL' %}
-                            {% for p in res.periods %}
-                            <td class="text-center">{{ row.period_displays.get(p.id, '—') }}</td>
-                            {% endfor %}
-                            <td class="text-center fw-bold">{{ row.display_annual_average }}</td>
-                        {% else %}
-                            <td class="text-center fw-bold">{{ row.display_average }}</td>
-                        {% endif %}
-                        <td class="text-center">{{ row.appreciation }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="10" class="text-center py-4 text-muted">
-                            Aucun élève n'est encore classable (vérifiez que les notes sont complètes).
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="col-4">
+            {% if settings.logo_filename %}
+            <img src="{{ url_for('settings.school_logo') }}" alt="Logo" style="max-height: 58px;">
+            {% endif %}
         </div>
-
-        {% if res.unranked_active_rows or res.inactive_rows %}
-        <div class="alert alert-secondary small mt-3 mb-0">
-            <div class="fw-bold mb-1">Élèves exclus du classement conformément aux règles configurées :</div>
-            <ul class="mb-0">
-                {% for u in res.unranked_active_rows %}
-                <li>{{ u.enrollment.student.full_name }} (N° {{ u.enrollment.roll_number }}) — <em>{{ u.unranked_reason }}</em></li>
-                {% endfor %}
-                {% for inact in res.inactive_rows %}
-                <li>{{ inact.enrollment.student.full_name }} — <em>Élève inactif (conservé dans l'historique)</em></li>
-                {% endfor %}
-            </ul>
+        <div class="col-4 small">
+            <div class="fw-bold">{{ settings.school_name or 'Établissement scolaire' }}</div>
+            <div class="fw-semibold">Année scolaire : {{ res.academic_class.school_year.label }}</div>
         </div>
-        {% endif %}
     </div>
+
+    <div class="text-center mb-3">
+        <h2 class="h5 fw-bold mb-1" style="color: #0f172a;">
+            CLASSEMENT PAR ORDRE DE MÉRITE — {{ res.academic_class.name }} —
+            {{ ('ANNÉE ' + res.academic_class.school_year.label) if scope == 'ANNUEL' else res.period.name }}
+        </h2>
+        <div class="small text-muted">
+            Élèves classés : <strong>{{ res.ranked_rows | length }}</strong> sur {{ res.active_rows | length }} actifs ·
+            Admis (≥ moyenne) : <strong>{{ res.pass_count }}</strong> ({{ res.pass_rate_percent | dec_fr(1) }} %)
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 60px;">N°</th>
+                    <th class="text-center" style="width: 95px;">Rang</th>
+                    <th>Nom</th>
+                    <th>Prénoms</th>
+                    <th class="text-center" style="width: 60px;">Sexe</th>
+                    {% if scope == 'ANNUEL' %}
+                        {% for p in res.periods %}
+                        <th class="text-center">{{ p.short_code }}</th>
+                        {% endfor %}
+                    {% endif %}
+                    <th class="text-center">Moyenne /{{ res.general_scale | compact_fr }}</th>
+                    <th class="text-center">Appréciation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in res.ranked_rows %}
+                <tr>
+                    <td class="text-center yn-tabular">{{ loop.index }}</td>
+                    <td class="text-center fw-bold">{{ row.rank_label }}</td>
+                    <td class="fw-semibold">{{ row.enrollment.student.last_name }}</td>
+                    <td>{{ row.enrollment.student.first_names }}</td>
+                    <td class="text-center">{{ row.enrollment.student.sex }}</td>
+                    {% if scope == 'ANNUEL' %}
+                        {% for p in res.periods %}
+                        <td class="text-center yn-tabular">{{ row.period_displays.get(p.id, '—') }}</td>
+                        {% endfor %}
+                        <td class="text-center fw-bold yn-tabular">{{ row.display_annual_average }}</td>
+                    {% else %}
+                        <td class="text-center fw-bold yn-tabular">{{ row.display_average }}</td>
+                    {% endif %}
+                    <td class="text-center">{{ row.appreciation }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">
+                        Aucun élève n'est encore classable (vérifiez que les notes sont complètes).
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if res.unranked_active_rows or res.inactive_rows %}
+    <div class="border rounded p-2 bg-light small mt-3">
+        <div class="fw-bold mb-1">Élèves exclus du classement conformément aux règles configurées :</div>
+        <ul class="mb-0">
+            {% for u in res.unranked_active_rows %}
+            <li>{{ u.enrollment.student.full_name }} (N° {{ u.enrollment.roll_number }}) — <em>{{ u.unranked_reason }}</em></li>
+            {% endfor %}
+            {% for inact in res.inactive_rows %}
+            <li>{{ inact.enrollment.student.full_name }} — <em>Élève inactif (conservé dans l'historique)</em></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card">
+    {{ empty_state('award', 'Aucun classement disponible', 'Sélectionnez une classe et une période d’évaluation.') }}
 </div>
 {% endif %}
 {% endblock %}

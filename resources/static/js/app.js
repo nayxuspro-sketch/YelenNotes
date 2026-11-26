@@ -1,10 +1,217 @@
 /* ==========================================================================
-   YELEN NOTES — JavaScript natif local (saisie clavier, autosave CSRF, grilles)
+   YELEN NOTES — Frontend Architecture & Micro-Interactions (100 % Local)
+   - Thème Clair / Sombre mémorisé (localStorage)
+   - Sidebar réductible (desktop) & tiroir adaptatif (tablette/mobile)
+   - Sous-menus déroulants par catégorie fonctionnelle
+   - Recherche instantanée et tri par colonnes sur les tableaux
+   - Saisie rapide au clavier, autosave CSRF et verrouillage optimiste des notes
    ========================================================================== */
 
 (function () {
     "use strict";
 
+    var THEME_KEY = "yn_theme_preference";
+    var SIDEBAR_KEY = "yn_sidebar_collapsed";
+
+    /* ----------------------------------------------------------------------
+       1. MOTEUR DE THÈME CLAIR / SOMBRE (§12)
+       ---------------------------------------------------------------------- */
+    function getPreferredTheme() {
+        try {
+            var stored = window.localStorage.getItem(THEME_KEY);
+            if (stored === "dark" || stored === "light") return stored;
+        } catch (e) {}
+        return "light";
+    }
+
+    function applyTheme(theme) {
+        var resolved = theme === "dark" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", resolved);
+        document.documentElement.setAttribute("data-bs-theme", resolved);
+        try {
+            window.localStorage.setItem(THEME_KEY, resolved);
+        } catch (e) {}
+
+        Array.prototype.slice.call(document.querySelectorAll("[data-yn-theme-toggle]")).forEach(function (btn) {
+            var sunIcon = btn.querySelector(".yn-theme-sun");
+            var moonIcon = btn.querySelector(".yn-theme-moon");
+            var labelEl = btn.querySelector(".yn-theme-label");
+            if (sunIcon && moonIcon) {
+                sunIcon.style.display = resolved === "dark" ? "inline-flex" : "none";
+                moonIcon.style.display = resolved === "dark" ? "none" : "inline-flex";
+            }
+            if (labelEl) {
+                labelEl.textContent = resolved === "dark" ? "Mode clair" : "Mode sombre";
+            }
+            btn.setAttribute(
+                "title",
+                resolved === "dark" ? "Basculer en mode clair" : "Basculer en mode sombre"
+            );
+        });
+    }
+
+    function setupThemeToggle() {
+        applyTheme(getPreferredTheme());
+        Array.prototype.slice.call(document.querySelectorAll("[data-yn-theme-toggle]")).forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var current = document.documentElement.getAttribute("data-theme") || "light";
+                applyTheme(current === "dark" ? "light" : "dark");
+            });
+        });
+    }
+
+    /* ----------------------------------------------------------------------
+       2. SIDEBAR RÉDUCTIBLE, TIROIR MOBILE & SOUS-MENUS (§4.A & §10)
+       ---------------------------------------------------------------------- */
+    function setupSidebarAndNavigation() {
+        try {
+            if (window.innerWidth >= 992 && window.localStorage.getItem(SIDEBAR_KEY) === "1") {
+                document.body.classList.add("yn-sidebar-collapsed");
+            }
+        } catch (e) {}
+
+        var desktopToggle = document.getElementById("yn-sidebar-collapse-btn");
+        if (desktopToggle) {
+            desktopToggle.addEventListener("click", function () {
+                var collapsed = document.body.classList.toggle("yn-sidebar-collapsed");
+                try {
+                    window.localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+                } catch (e) {}
+            });
+        }
+
+        var mobileOpenBtn = document.getElementById("yn-mobile-menu-btn");
+        var backdrop = document.getElementById("yn-sidebar-backdrop");
+        if (mobileOpenBtn) {
+            mobileOpenBtn.addEventListener("click", function () {
+                document.body.classList.toggle("yn-mobile-nav-open");
+            });
+        }
+        if (backdrop) {
+            backdrop.addEventListener("click", function () {
+                document.body.classList.remove("yn-mobile-nav-open");
+            });
+        }
+        document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape") {
+                document.body.classList.remove("yn-mobile-nav-open");
+            }
+        });
+
+        // Sous-menus déroulants
+        Array.prototype.slice.call(document.querySelectorAll(".yn-nav-group")).forEach(function (group) {
+            var btn = group.querySelector(".yn-nav-group-btn");
+            if (!btn) return;
+            btn.addEventListener("click", function () {
+                if (document.body.classList.contains("yn-sidebar-collapsed") && window.innerWidth >= 992) {
+                    document.body.classList.remove("yn-sidebar-collapsed");
+                    try {
+                        window.localStorage.setItem(SIDEBAR_KEY, "0");
+                    } catch (e) {}
+                    group.classList.add("is-open");
+                    return;
+                }
+                group.classList.toggle("is-open");
+            });
+        });
+    }
+
+    /* ----------------------------------------------------------------------
+       3. TABLEAUX INTERACTIFS : RECHERCHE INSTANTANÉE & TRI COLONNES (§6)
+       ---------------------------------------------------------------------- */
+    function setupInteractiveTables() {
+        // Recherche rapide instantanée côté client
+        Array.prototype.slice.call(document.querySelectorAll("[data-yn-table-filter]")).forEach(function (input) {
+            var targetSelector = input.getAttribute("data-yn-table-filter");
+            var table = targetSelector ? document.querySelector(targetSelector) : null;
+            if (!table) return;
+            var countEl = document.querySelector('[data-yn-filter-count="' + targetSelector + '"]');
+
+            input.addEventListener("input", function () {
+                var query = (input.value || "").trim().toLowerCase();
+                var rows = Array.prototype.slice.call(table.querySelectorAll("tbody > tr:not(.collapse)"));
+                var visible = 0;
+                rows.forEach(function (tr) {
+                    if (tr.querySelector("td[colspan]")) return;
+                    var text = (tr.textContent || "").toLowerCase();
+                    var match = !query || text.indexOf(query) !== -1;
+                    tr.style.display = match ? "" : "none";
+                    if (match) visible += 1;
+                });
+                if (countEl) {
+                    countEl.textContent = visible + " affiché(s)";
+                }
+            });
+        });
+
+        // Tri par clic sur les colonnes marquées .yn-sortable
+        Array.prototype.slice.call(document.querySelectorAll("table")).forEach(function (table) {
+            var headers = Array.prototype.slice.call(table.querySelectorAll("thead th.yn-sortable"));
+            headers.forEach(function (th, colIndex) {
+                th.addEventListener("click", function () {
+                    var tbody = table.querySelector("tbody");
+                    if (!tbody) return;
+                    var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr")).filter(function (r) {
+                        return !r.classList.contains("collapse") && !r.querySelector("td[colspan]");
+                    });
+                    if (rows.length < 2) return;
+
+                    var asc = !th.classList.contains("yn-sort-asc");
+                    headers.forEach(function (h) {
+                        h.classList.remove("yn-sort-asc", "yn-sort-desc");
+                    });
+                    th.classList.add(asc ? "yn-sort-asc" : "yn-sort-desc");
+
+                    rows.sort(function (a, b) {
+                        var cellA = a.children[colIndex] ? a.children[colIndex].textContent.trim() : "";
+                        var cellB = b.children[colIndex] ? b.children[colIndex].textContent.trim() : "";
+                        var numA = parseFloat(cellA.replace(/\s/g, "").replace(",", "."));
+                        var numB = parseFloat(cellB.replace(/\s/g, "").replace(",", "."));
+                        if (!isNaN(numA) && !isNaN(numB) && /^[-+]?[\d\s,.]+$/.test(cellA) && /^[-+]?[\d\s,.]+$/.test(cellB)) {
+                            return asc ? numA - numB : numB - numA;
+                        }
+                        return asc
+                            ? cellA.localeCompare(cellB, "fr", { sensitivity: "base" })
+                            : cellB.localeCompare(cellA, "fr", { sensitivity: "base" });
+                    });
+
+                    rows.forEach(function (r) {
+                        var collapseId = null;
+                        var trigger = r.querySelector('[data-bs-toggle="collapse"]');
+                        if (trigger) {
+                            collapseId = trigger.getAttribute("data-bs-target");
+                        }
+                        tbody.appendChild(r);
+                        if (collapseId) {
+                            var detailRow = tbody.querySelector(collapseId);
+                            if (detailRow) tbody.appendChild(detailRow);
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    /* ----------------------------------------------------------------------
+       4. MICRO-INTERACTIONS SUR SOUMISSION DE FORMULAIRES (§11)
+       ---------------------------------------------------------------------- */
+    function setupFormFeedback() {
+        Array.prototype.slice.call(document.querySelectorAll("form[method='post'], form[method='POST']")).forEach(function (form) {
+            if (form.getAttribute("action") && form.getAttribute("action").indexOf("/pdf") !== -1) return;
+            form.addEventListener("submit", function () {
+                var btn = form.querySelector("button[type='submit']:not([data-no-loading])");
+                if (!btn || btn.dataset.submitting === "1") return;
+                btn.dataset.submitting = "1";
+                setTimeout(function () {
+                    btn.disabled = true;
+                }, 20);
+            });
+        });
+    }
+
+    /* ----------------------------------------------------------------------
+       5. MATRICE DE SAISIE DES NOTES (CLAVIER, AUTOSAVE & CONCURRENCE)
+       ---------------------------------------------------------------------- */
     function getCsrfToken() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute("content") : "";
@@ -22,7 +229,7 @@
             badge.textContent = message || "Erreur de saisie à corriger";
         } else {
             badge.className += "text-bg-success";
-            badge.textContent = message || "● Toutes les saisies sont enregistrées";
+            badge.textContent = message || "Toutes les saisies sont enregistrées";
         }
     }
 
@@ -123,14 +330,13 @@
                         input.classList.remove("is-saved");
                     }, 1100);
 
-                    // Mise à jour de la colonne résumé de l'élève
                     var sumCell = document.getElementById("row-summary-" + payload.enrollment_id);
                     if (sumCell && res.data.student_summary) {
                         var s = res.data.student_summary;
                         if (s.is_complete) {
                             sumCell.innerHTML =
                                 '<span class="badge text-bg-success me-1">Complet</span> ' +
-                                '<strong>' + s.display_average + '</strong>';
+                                '<strong class="yn-tabular">' + s.display_average + "</strong>";
                         } else {
                             sumCell.innerHTML =
                                 '<span class="badge text-bg-warning">' +
@@ -138,7 +344,7 @@
                                 "</span>";
                         }
                     }
-                    updateSaveStatusBanner("saved", "● Toutes les saisies sont enregistrées");
+                    updateSaveStatusBanner("saved", "Toutes les saisies sont enregistrées");
                 } else if (res.status === 409 && res.data.conflict) {
                     var overwrite = window.confirm(
                         res.data.error +
@@ -152,7 +358,7 @@
                         input.dataset.version = String(res.data.current_version);
                         input.dataset.lastSaved = input.value;
                         validateGradeClientSide(input);
-                        updateSaveStatusBanner("saved", "● Valeur synchronisée avec le serveur");
+                        updateSaveStatusBanner("saved", "Valeur synchronisée avec le serveur");
                     }
                 } else {
                     input.classList.add("is-invalid-grade");
@@ -294,6 +500,10 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
+        setupThemeToggle();
+        setupSidebarAndNavigation();
+        setupInteractiveTables();
+        setupFormFeedback();
         setupGradeMatrixKeyboard();
         setupGradingScaleBuilder();
         setupSelectAllCheckboxes();

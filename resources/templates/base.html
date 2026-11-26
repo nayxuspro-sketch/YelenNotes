@@ -1,313 +1,472 @@
+{% from "components/ui.html" import icon %}
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Yelen Notes{% endblock %} — Gestion scolaire locale</title>
+    <title>{% block title %}Yelen Notes{% endblock %} — Gestion scolaire</title>
+    <script>
+        (function () {
+            try {
+                var t = window.localStorage.getItem("yn_theme_preference");
+                if (t === "dark" || t === "light") {
+                    document.documentElement.setAttribute("data-theme", t);
+                    document.documentElement.setAttribute("data-bs-theme", t);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
     {% if is_demo_mode %}
-    <div class="yn-demo-strip">
-        ⚠ MODE DÉMONSTRATION — DONNÉES SCOLAIRES FICTIVES (`ecole_demo.db`) — Réservé aux essais et à la formation
+    <div class="yn-demo-strip no-print">
+        MODE DÉMONSTRATION — Base scolaire fictive isolée (`ecole_demo.db`) dédiée aux essais et à la formation
     </div>
     {% endif %}
 
     {% if is_unc_warning %}
-    <div class="alert alert-danger rounded-0 mb-0 py-2 text-center fw-semibold">
+    <div class="alert alert-danger rounded-0 mb-0 py-2 text-center fw-semibold no-print">
         Alerte critique : la base SQLite semble placée sur un partage réseau UNC. Déplacez le dossier de données sur un disque local du serveur.
     </div>
     {% endif %}
 
     {% if current_user.is_authenticated %}
-    <header class="yn-topbar py-2 px-3">
-        <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <div class="d-flex align-items-center gap-3">
-                <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2">
+    {% set ep = request.endpoint or '' %}
+    {% set user_initials = ((current_user.full_name or current_user.username)[:2]) | upper %}
+    {% set active_school_label = (nav_current_est.name if nav_current_est else (current_establishment.school_name if current_establishment and current_establishment.school_name else 'Établissement non renseigné')) %}
+
+    <div class="yn-app-shell">
+        <div class="yn-sidebar-backdrop no-print" id="yn-sidebar-backdrop"></div>
+
+        <!-- ==============================================================
+             ZONE A — BARRE LATÉRALE INSTITUTIONNELLE (SIDEBAR)
+             ============================================================== -->
+        <aside class="yn-sidebar no-print" aria-label="Navigation principale">
+            <div class="yn-sidebar-header">
+                <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}" class="yn-brand-link">
                     <span class="yn-brand-badge">YN</span>
-                    <div>
-                        <div class="fw-bold lh-1">YELEN NOTES</div>
-                        <small class="text-white-50" style="font-size: 0.73rem;">
-                            v{{ app_version }} • {{ 'Multiposte réseau local' if server_mode == 'multiposte' else 'Monoposte local' }}
-                        </small>
+                    <div class="yn-brand-meta">
+                        <div class="yn-brand-title">Yelen Notes</div>
+                        <div class="yn-brand-sub">v{{ app_version }} · {{ 'Multiposte LAN' if server_mode == 'multiposte' else 'Poste local' }}</div>
                     </div>
                 </a>
-                {% if nav_current_est %}
-                <span class="vr bg-light opacity-25 d-none d-md-inline"></span>
-                <span class="fw-semibold d-none d-md-inline text-light">
-                    {{ nav_current_est.name }}
-                </span>
-                {% elif current_establishment and current_establishment.school_name %}
-                <span class="vr bg-light opacity-25 d-none d-md-inline"></span>
-                <span class="fw-semibold d-none d-md-inline text-light">
-                    {{ current_establishment.school_name }}
-                </span>
-                {% endif %}
             </div>
 
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                {% if nav_establishments and (nav_establishments | length) > 1 %}
-                <form method="post" action="{{ url_for('rbac_admin.switch_establishment') }}" class="d-flex align-items-center gap-1 m-0">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label for="nav-est-select" class="small text-white-50 me-1 d-none d-xl-inline">Établissement :</label>
-                    <select id="nav-est-select" name="establishment_id" class="form-select form-select-sm bg-light" onchange="this.form.submit()">
-                        {% for est in nav_establishments %}
-                        <option value="{{ est.id }}" {% if nav_current_est and nav_current_est.id == est.id %}selected{% endif %}>
-                            {{ est.code }} — {{ est.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </form>
-                {% endif %}
-
-                {% if nav_years and not is_parent_only %}
-                <form method="post" action="{{ url_for('dashboard.switch_view_year') }}" class="d-flex align-items-center gap-1 m-0">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label for="nav-year-select" class="small text-white-50 me-1 d-none d-sm-inline">Année :</label>
-                    <select id="nav-year-select" name="school_year_id" class="form-select form-select-sm bg-light" onchange="this.form.submit()">
-                        {% for yr in nav_years %}
-                        <option value="{{ yr.id }}" {% if nav_selected_year and nav_selected_year.id == yr.id %}selected{% endif %}>
-                            {{ yr.label }}{% if yr.status == 'CLOTUREE' %} (Clôturée){% elif current_establishment and current_establishment.active_school_year_id == yr.id %} (Active){% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </form>
-                {% endif %}
-
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        {{ current_user.full_name }} ({{ current_user.role_label }})
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('auth.change_password') }}">Modifier mon mot de passe</a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="dropdown-item text-danger">Se déconnecter</button>
-                            </form>
-                        </li>
-                    </ul>
+            <!-- Identité de l'établissement actif -->
+            <div class="yn-sidebar-school" title="{{ active_school_label }}">
+                <div class="yn-sidebar-school-icon">{{ icon('building-2', 15) }}</div>
+                <div class="yn-sidebar-school-info">
+                    <div class="yn-sidebar-school-name">{{ active_school_label }}</div>
+                    <div class="yn-sidebar-school-year">
+                        {% if nav_selected_year %}Année {{ nav_selected_year.label }}{% else %}Configuration initiale{% endif %}
+                    </div>
                 </div>
             </div>
-        </div>
-    </header>
 
-    <div class="d-flex flex-column flex-lg-row">
-        <nav class="yn-sidebar py-2 no-print" aria-label="Menu principal">
-            <div class="yn-nav-section">Pilotage</div>
-            <ul class="nav flex-column">
+            <nav class="yn-sidebar-nav">
+                <!-- 1. Tableau de bord -->
+                <div class="yn-nav-category">Pilotage</div>
                 {% if can_perm('dashboard.view') and not is_parent_only %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" href="{{ url_for('dashboard.index') }}">
-                        Tableau de bord
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('dashboard.index') }}" class="yn-nav-link {% if ep == 'dashboard.index' %}active{% endif %}" title="Tableau de bord">
+                        {{ icon('layout-dashboard', 17) }}
+                        <span class="yn-nav-label">Tableau de bord</span>
                     </a>
-                </li>
+                </div>
                 {% endif %}
                 {% if is_parent_only or (current_user.parent_links | length > 0) %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'operations.parent_portal' %}active{% endif %}" href="{{ url_for('operations.parent_portal') }}">
-                        Espace Parent / Tuteur
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('operations.parent_portal') }}" class="yn-nav-link {% if ep == 'operations.parent_portal' %}active{% endif %}" title="Espace Parent / Tuteur">
+                        {{ icon('heart-handshake', 17) }}
+                        <span class="yn-nav-label">Espace Parent / Tuteur</span>
                     </a>
-                </li>
-                {% endif %}
-            </ul>
-
-            {% if not is_parent_only and has_any_perm('students.view', 'enrollments.view', 'subjects.view', 'grades.view') %}
-            <div class="yn-nav-section">Pédagogie & Saisie</div>
-            <ul class="nav flex-column">
-                {% if has_any_perm('students.view', 'enrollments.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if (request.endpoint or '').startswith('students.') %}active{% endif %}" href="{{ url_for('students.students_list') }}">
-                        Élèves & Inscriptions
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('subjects.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint in ('academics.class_subjects', 'academics.subjects_entry_shortcut') %}active{% endif %}" href="{{ url_for('academics.subjects_entry_shortcut') }}">
-                        Matières & Barèmes
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('grades.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint in ('grades.grade_entry', 'grades.grade_history_view') %}active{% endif %}" href="{{ url_for('grades.grade_entry') }}">
-                        Saisie des notes
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'grades.period_observations' %}active{% endif %}" href="{{ url_for('grades.period_observations') }}">
-                        Observations bulletins
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-            {% endif %}
-
-            {% if not is_parent_only and has_any_perm('absences.view', 'accounting.view') %}
-            <div class="yn-nav-section">Vie scolaire & Gestion</div>
-            <ul class="nav flex-column">
-                {% if can_perm('absences.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'operations.absences_manage' %}active{% endif %}" href="{{ url_for('operations.absences_manage') }}">
-                        Absences & Discipline
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('accounting.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'operations.accounting_manage' %}active{% endif %}" href="{{ url_for('operations.accounting_manage') }}">
-                        Comptabilité scolaire
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-            {% endif %}
-
-            {% if not is_parent_only and has_any_perm('bulletins.view', 'proposition.view') %}
-            <div class="yn-nav-section">États & Impression PDF</div>
-            <ul class="nav flex-column">
-                {% if can_perm('bulletins.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'reports.period_releve' %}active{% endif %}" href="{{ url_for('reports.period_releve') }}">
-                        Relevés de notes
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'reports.merit_ranking' %}active{% endif %}" href="{{ url_for('reports.merit_ranking') }}">
-                        Classement de mérite
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'reports.synoptic_report' %}active{% endif %}" href="{{ url_for('reports.synoptic_report') }}">
-                        Tableau synoptique
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('proposition.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'reports.end_of_year_proposition' %}active{% endif %}" href="{{ url_for('reports.end_of_year_proposition') }}">
-                        Proposition de fin d'année
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('bulletins.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'reports.bulletins_center' %}active{% endif %}" href="{{ url_for('reports.bulletins_center') }}">
-                        Bulletins scolaires PDF
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-            {% endif %}
-
-            {% if not is_parent_only and has_any_perm('settings.view', 'evaluations.view', 'classes.view', 'subjects.view') %}
-            <div class="yn-nav-section">Paramétrage scolaire</div>
-            <ul class="nav flex-column">
-                {% if can_perm('settings.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'settings.establishment' %}active{% endif %}" href="{{ url_for('settings.establishment') }}">
-                        Établissement & Logo
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('evaluations.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint in ('settings.school_years', 'settings.periods') %}active{% endif %}" href="{{ url_for('settings.school_years') }}">
-                        Années & Périodes
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('classes.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'academics.classes_list' %}active{% endif %}" href="{{ url_for('academics.classes_list') }}">
-                        Classes & Matières
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('subjects.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'academics.policies_and_scales' %}active{% endif %}" href="{{ url_for('academics.policies_and_scales') }}">
-                        Barèmes & Appréciations
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-            {% endif %}
-
-            {% if has_any_perm('rbac.view', 'users.view', 'settings.update', 'settings.manage', 'audit.view') %}
-            <div class="yn-nav-section">Administration & Sécurité</div>
-            <ul class="nav flex-column">
-                {% if can_perm('rbac.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if (request.endpoint or '').startswith('rbac_admin.') %}active{% endif %}" href="{{ url_for('rbac_admin.index') }}">
-                        Gestion des rôles & permissions
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('users.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'admin.users_manage' %}active{% endif %}" href="{{ url_for('admin.users_manage') }}">
-                        Comptes utilisateurs
-                    </a>
-                </li>
-                {% endif %}
-                {% if has_any_perm('settings.update', 'settings.manage') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'admin.backups_manage' %}active{% endif %}" href="{{ url_for('admin.backups_manage') }}">
-                        Sauvegardes & Restauration
-                    </a>
-                </li>
-                {% endif %}
-                {% if can_perm('audit.view') %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'admin.audit_logs_view' %}active{% endif %}" href="{{ url_for('admin.audit_logs_view') }}">
-                        Journaux & Diagnostic
-                    </a>
-                </li>
-                {% endif %}
-            </ul>
-            {% endif %}
-        </nav>
-
-        <main class="yn-main-content flex-grow-1 p-3 p-lg-4">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                <div class="mb-3 no-print">
-                    {% for category, msg in messages %}
-                    <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show py-2 mb-2" role="alert">
-                        {{ msg }}
-                        <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
-                    </div>
-                    {% endfor %}
                 </div>
                 {% endif %}
-            {% endwith %}
 
-            {% block content %}{% endblock %}
-        </main>
+                {% if not is_parent_only %}
+                <!-- 2. Administration scolaire -->
+                {% if has_any_perm('evaluations.view', 'settings.view') %}
+                <div class="yn-nav-category">Administration scolaire</div>
+                {% set grp_school_open = ep in ('settings.school_years', 'settings.periods') %}
+                {% if can_perm('evaluations.view') %}
+                <div class="yn-nav-item yn-nav-group {% if grp_school_open %}is-open has-active{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Calendrier & Périodes">
+                        {{ icon('calendar', 17) }}
+                        <span class="yn-nav-label">Années & Périodes</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        <a href="{{ url_for('settings.school_years') }}" class="yn-nav-sublink {% if ep == 'settings.school_years' %}active{% endif %}">Années scolaires</a>
+                        <a href="{{ url_for('settings.periods') }}" class="yn-nav-sublink {% if ep == 'settings.periods' %}active{% endif %}">Périodes d'évaluation</a>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <!-- 3. Gestion des élèves -->
+                {% if has_any_perm('students.view', 'enrollments.view', 'absences.view') %}
+                {% set grp_students_open = ep.startswith('students.') or ep == 'operations.absences_manage' %}
+                <div class="yn-nav-category">Scolarité & Élèves</div>
+                <div class="yn-nav-item yn-nav-group {% if grp_students_open %}is-open has-active{% else %}is-open{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Gestion des élèves">
+                        {{ icon('users', 17) }}
+                        <span class="yn-nav-label">Gestion des élèves</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        {% if has_any_perm('students.view', 'enrollments.view') %}
+                        <a href="{{ url_for('students.students_list') }}" class="yn-nav-sublink {% if ep in ('students.students_list', 'students.student_detail', 'students.students_bulk_edit') %}active{% endif %}">Élèves & Inscriptions</a>
+                        {% endif %}
+                        {% if can_perm('enrollments.validate') %}
+                        <a href="{{ url_for('students.year_transition') }}" class="yn-nav-sublink {% if ep == 'students.year_transition' %}active{% endif %}">Passage d'année</a>
+                        {% endif %}
+                        {% if can_perm('absences.view') %}
+                        <a href="{{ url_for('operations.absences_manage') }}" class="yn-nav-sublink {% if ep == 'operations.absences_manage' %}active{% endif %}">Absences & Discipline</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 4. Gestion pédagogique -->
+                {% if has_any_perm('classes.view', 'subjects.view') %}
+                {% set grp_pedag_open = ep.startswith('academics.') %}
+                <div class="yn-nav-category">Organisation pédagogique</div>
+                <div class="yn-nav-item yn-nav-group {% if grp_pedag_open %}is-open has-active{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Gestion pédagogique">
+                        {{ icon('book-open', 17) }}
+                        <span class="yn-nav-label">Gestion pédagogique</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        {% if can_perm('classes.view') %}
+                        <a href="{{ url_for('academics.classes_list') }}" class="yn-nav-sublink {% if ep == 'academics.classes_list' %}active{% endif %}">Classes & Titulaires</a>
+                        {% endif %}
+                        {% if can_perm('subjects.view') %}
+                        <a href="{{ url_for('academics.subjects_entry_shortcut') }}" class="yn-nav-sublink {% if ep in ('academics.class_subjects', 'academics.subjects_entry_shortcut') %}active{% endif %}">Matières & Barèmes</a>
+                        <a href="{{ url_for('academics.policies_and_scales') }}" class="yn-nav-sublink {% if ep == 'academics.policies_and_scales' %}active{% endif %}">Barèmes & Appréciations</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 5. Évaluations et notes -->
+                {% if can_perm('grades.view') %}
+                {% set grp_grades_open = ep.startswith('grades.') %}
+                <div class="yn-nav-category">Évaluations & Résultats</div>
+                <div class="yn-nav-item yn-nav-group {% if grp_grades_open %}is-open has-active{% else %}is-open{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Évaluations et notes">
+                        {{ icon('pen-line', 17) }}
+                        <span class="yn-nav-label">Évaluations et notes</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        <a href="{{ url_for('grades.grade_entry') }}" class="yn-nav-sublink {% if ep == 'grades.grade_entry' %}active{% endif %}">Saisie des notes</a>
+                        <a href="{{ url_for('grades.period_observations') }}" class="yn-nav-sublink {% if ep == 'grades.period_observations' %}active{% endif %}">Observations bulletins</a>
+                        <a href="{{ url_for('grades.grade_history_view') }}" class="yn-nav-sublink {% if ep == 'grades.grade_history_view' %}active{% endif %}">Historique des saisies</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 6. Bulletins et résultats & 8. Rapports et statistiques -->
+                {% if has_any_perm('bulletins.view', 'proposition.view') %}
+                {% set grp_reports_open = ep in ('reports.bulletins_center', 'reports.period_releve', 'reports.merit_ranking', 'reports.end_of_year_proposition') %}
+                <div class="yn-nav-item yn-nav-group {% if grp_reports_open %}is-open has-active{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Bulletins et résultats">
+                        {{ icon('award', 17) }}
+                        <span class="yn-nav-label">Bulletins et résultats</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        {% if can_perm('bulletins.view') %}
+                        <a href="{{ url_for('reports.bulletins_center') }}" class="yn-nav-sublink {% if ep == 'reports.bulletins_center' %}active{% endif %}">Bulletins scolaires PDF</a>
+                        <a href="{{ url_for('reports.period_releve') }}" class="yn-nav-sublink {% if ep == 'reports.period_releve' %}active{% endif %}">Relevés de notes</a>
+                        <a href="{{ url_for('reports.merit_ranking') }}" class="yn-nav-sublink {% if ep == 'reports.merit_ranking' %}active{% endif %}">Classement de mérite</a>
+                        {% endif %}
+                        {% if can_perm('proposition.view') %}
+                        <a href="{{ url_for('reports.end_of_year_proposition') }}" class="yn-nav-sublink {% if ep == 'reports.end_of_year_proposition' %}active{% endif %}">Proposition de fin d'année</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if can_perm('bulletins.view') %}
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('reports.synoptic_report') }}" class="yn-nav-link {% if ep == 'reports.synoptic_report' %}active{% endif %}" title="Rapports et statistiques">
+                        {{ icon('bar-chart-3', 17) }}
+                        <span class="yn-nav-label">Tableau synoptique</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- 7. Comptabilité -->
+                {% if can_perm('accounting.view') %}
+                <div class="yn-nav-category">Finances</div>
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('operations.accounting_manage') }}" class="yn-nav-link {% if ep == 'operations.accounting_manage' %}active{% endif %}" title="Comptabilité">
+                        {{ icon('wallet', 17) }}
+                        <span class="yn-nav-label">Comptabilité scolaire</span>
+                    </a>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <!-- 9. Administration et sécurité -->
+                {% if has_any_perm('rbac.view', 'users.view', 'settings.update', 'settings.manage', 'audit.view') %}
+                {% set grp_sec_open = ep.startswith('rbac_admin.') or ep.startswith('admin.') %}
+                <div class="yn-nav-category">Gouvernance & Système</div>
+                <div class="yn-nav-item yn-nav-group {% if grp_sec_open %}is-open has-active{% endif %}">
+                    <button type="button" class="yn-nav-group-btn" title="Administration et sécurité">
+                        {{ icon('shield-check', 17) }}
+                        <span class="yn-nav-label">Administration & Sécurité</span>
+                        <span class="yn-nav-chevron">{{ icon('chevron-right', 14) }}</span>
+                    </button>
+                    <div class="yn-nav-submenu">
+                        {% if can_perm('rbac.view') %}
+                        <a href="{{ url_for('rbac_admin.index') }}" class="yn-nav-sublink {% if ep.startswith('rbac_admin.') %}active{% endif %}">Rôles & Permissions</a>
+                        {% endif %}
+                        {% if can_perm('users.view') %}
+                        <a href="{{ url_for('admin.users_manage') }}" class="yn-nav-sublink {% if ep == 'admin.users_manage' %}active{% endif %}">Comptes utilisateurs</a>
+                        {% endif %}
+                        {% if has_any_perm('settings.update', 'settings.manage') %}
+                        <a href="{{ url_for('admin.backups_manage') }}" class="yn-nav-sublink {% if ep == 'admin.backups_manage' %}active{% endif %}">Sauvegardes SQLite</a>
+                        {% endif %}
+                        {% if can_perm('audit.view') %}
+                        <a href="{{ url_for('admin.audit_logs_view') }}" class="yn-nav-sublink {% if ep == 'admin.audit_logs_view' %}active{% endif %}">Journaux & Diagnostic</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 10. Paramètres -->
+                <div class="yn-nav-category">Paramètres</div>
+                {% if can_perm('settings.view') and not is_parent_only %}
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('settings.establishment') }}" class="yn-nav-link {% if ep == 'settings.establishment' %}active{% endif %}" title="Paramètres de l'établissement">
+                        {{ icon('settings', 17) }}
+                        <span class="yn-nav-label">Établissement & Logo</span>
+                    </a>
+                </div>
+                {% endif %}
+                <div class="yn-nav-item">
+                    <a href="{{ url_for('auth.change_password') }}" class="yn-nav-link {% if ep == 'auth.change_password' %}active{% endif %}" title="Sécurité du mot de passe">
+                        {{ icon('key-round', 17) }}
+                        <span class="yn-nav-label">Mot de passe</span>
+                    </a>
+                </div>
+            </nav>
+
+            <!-- Profil utilisateur connecté en bas de sidebar -->
+            <div class="yn-sidebar-footer">
+                <span class="yn-avatar">{{ user_initials }}</span>
+                <div class="yn-sidebar-user-meta">
+                    <div class="yn-sidebar-user-name">{{ current_user.full_name }}</div>
+                    <div class="yn-sidebar-user-role">{{ current_user.role_label }}</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ==============================================================
+             ZONES B & C — TOPBAR SOBRE + ESPACE DE TRAVAIL PRINCIPAL
+             ============================================================== -->
+        <div class="yn-workspace-col">
+            <header class="yn-topbar no-print">
+                <div class="yn-topbar-left">
+                    <button type="button" class="yn-icon-btn d-lg-none" id="yn-mobile-menu-btn" aria-label="Ouvrir la navigation">
+                        {{ icon('menu', 17) }}
+                    </button>
+                    <button type="button" class="yn-icon-btn d-none d-lg-inline-flex" id="yn-sidebar-collapse-btn" title="Réduire / développer la barre latérale">
+                        {{ icon('panel-left', 17) }}
+                    </button>
+
+                    <!-- Fil d'Ariane dynamique (Breadcrumbs) -->
+                    <nav class="yn-breadcrumbs" aria-label="Fil d'Ariane">
+                        <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}">Accueil</a>
+                        {% block breadcrumb %}
+                            {% if ep != 'dashboard.index' %}
+                                {{ icon('chevron-right', 13) }}
+                                <span class="yn-crumb-current">{{ self.title() }}</span>
+                            {% else %}
+                                {{ icon('chevron-right', 13) }}
+                                <span class="yn-crumb-current">Tableau de bord</span>
+                            {% endif %}
+                        {% endblock %}
+                    </nav>
+                </div>
+
+                <div class="yn-topbar-right">
+                    <!-- Sélecteur multi-établissements (si autorisé sur plusieurs) -->
+                    {% if nav_establishments and (nav_establishments | length) > 1 %}
+                    <form method="post" action="{{ url_for('rbac_admin.switch_establishment') }}" class="m-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="yn-context-pill" title="Établissement actif">
+                            {{ icon('building-2', 14) }}
+                            <select name="establishment_id" aria-label="Établissement" onchange="this.form.submit()">
+                                {% for est in nav_establishments %}
+                                <option value="{{ est.id }}" {% if nav_current_est and nav_current_est.id == est.id %}selected{% endif %}>
+                                    {{ est.code }} — {{ est.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                    {% endif %}
+
+                    <!-- Sélecteur d'année scolaire -->
+                    {% if nav_years and not is_parent_only %}
+                    <form method="post" action="{{ url_for('dashboard.switch_view_year') }}" class="m-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="yn-context-pill" title="Année scolaire consultée">
+                            {{ icon('calendar', 14) }}
+                            <span class="d-none d-xl-inline">Année</span>
+                            <select name="school_year_id" aria-label="Année scolaire" onchange="this.form.submit()">
+                                {% for yr in nav_years %}
+                                <option value="{{ yr.id }}" {% if nav_selected_year and nav_selected_year.id == yr.id %}selected{% endif %}>
+                                    {{ yr.label }}{% if yr.status == 'CLOTUREE' %} (Clôturée){% elif current_establishment and current_establishment.active_school_year_id == yr.id %} (Active){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                    {% endif %}
+
+                    <!-- Centre de notifications rapides -->
+                    <div class="dropdown">
+                        <button type="button" class="yn-icon-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Informations & état système">
+                            {{ icon('bell', 16) }}
+                            {% if is_demo_mode or not nav_selected_year %}
+                            <span class="yn-notif-dot"></span>
+                            {% endif %}
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-0" style="width: 310px;">
+                            <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold small">Centre d'informations</span>
+                                <span class="badge text-bg-primary">Temps réel</span>
+                            </div>
+                            <div class="p-2 small">
+                                <div class="p-2 rounded mb-1 bg-light">
+                                    <div class="fw-semibold">{{ active_school_label }}</div>
+                                    <div class="text-muted">
+                                        {% if nav_selected_year %}
+                                            Année affichée : <strong>{{ nav_selected_year.label }}</strong> ({{ nav_selected_year.status }})
+                                        {% else %}
+                                            Aucune année scolaire encore créée.
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if is_demo_mode %}
+                                <div class="p-2 rounded text-warning">
+                                    Base de démonstration active (`ecole_demo.db`).
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bascule Mode Clair / Mode Sombre (§12) -->
+                    <button type="button" class="yn-icon-btn" data-yn-theme-toggle aria-label="Changer le thème">
+                        <span class="yn-theme-moon">{{ icon('moon', 16) }}</span>
+                        <span class="yn-theme-sun" style="display:none;">{{ icon('sun', 16) }}</span>
+                    </button>
+
+                    <!-- Accès rapide aux paramètres autorisés -->
+                    {% if can_perm('settings.view') and not is_parent_only %}
+                    <a href="{{ url_for('settings.establishment') }}" class="yn-icon-btn d-none d-sm-inline-flex" title="Paramètres de l'établissement">
+                        {{ icon('settings', 16) }}
+                    </a>
+                    {% endif %}
+
+                    <!-- Menu du compte utilisateur -->
+                    <div class="dropdown">
+                        <button class="yn-user-trigger dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="yn-avatar" style="width: 26px; height: 26px; font-size: 0.7rem; border-radius: 6px;">{{ user_initials }}</span>
+                            <span class="d-none d-md-inline">{{ current_user.full_name }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li class="px-3 py-2 border-bottom">
+                                <div class="fw-semibold small">{{ current_user.full_name }}</div>
+                                <div class="text-muted" style="font-size: 0.74rem;">{{ current_user.role_label }}</div>
+                            </li>
+                            <li>
+                                <a class="dropdown-item mt-1" href="{{ url_for('auth.change_password') }}">
+                                    {{ icon('key-round', 15) }} Modifier mon mot de passe
+                                </a>
+                            </li>
+                            {% if can_perm('rbac.view') %}
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('rbac_admin.index') }}">
+                                    {{ icon('shield-check', 15) }} Rôles & permissions
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="dropdown-item text-danger" data-no-loading="1">
+                                        {{ icon('log-out', 15) }} Se déconnecter
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Zone C : Espace principal de travail -->
+            <main class="yn-main-content">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    <div class="mb-3 no-print">
+                        {% for category, msg in messages %}
+                        {% set cat = category if category in ('success', 'danger', 'warning', 'info') else 'info' %}
+                        <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 px-3 mb-2 d-flex align-items-center gap-2" role="alert">
+                            {% if cat == 'success' %}{{ icon('check-circle', 17) }}
+                            {% elif cat == 'danger' %}{{ icon('alert-circle', 17) }}
+                            {% elif cat == 'warning' %}{{ icon('alert-triangle', 17) }}
+                            {% else %}{{ icon('info', 17) }}{% endif %}
+                            <div class="flex-grow-1">{{ msg }}</div>
+                            <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
     </div>
+
     {% else %}
-    <main class="container py-5">
+    <!-- Interface invitée (Connexion / Initialisation) avec bascule de thème -->
+    <div class="yn-auth-shell">
+        <div class="position-fixed top-0 end-0 p-3 no-print">
+            <button type="button" class="yn-icon-btn" data-yn-theme-toggle aria-label="Changer le thème">
+                <span class="yn-theme-moon">{{ icon('moon', 16) }}</span>
+                <span class="yn-theme-sun" style="display:none;">{{ icon('sun', 16) }}</span>
+            </button>
+        </div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-            <div class="mx-auto mb-3" style="max-width: 540px;">
+            <div class="w-100 mb-3" style="max-width: 480px;">
                 {% for category, msg in messages %}
-                <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show py-2" role="alert">
-                    {{ msg }}
+                {% set cat = category if category in ('success', 'danger', 'warning', 'info') else 'info' %}
+                <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 px-3 d-flex align-items-center gap-2" role="alert">
+                    {{ icon('info', 16) }}
+                    <div class="flex-grow-1">{{ msg }}</div>
                     <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Fermer"></button>
                 </div>
                 {% endfor %}
             </div>
             {% endif %}
         {% endwith %}
+
         {% block guest_content %}{% endblock %}
-    </main>
+    </div>
     {% endif %}
 
     <script src="{{ url_for('static', filename='bootstrap/bootstrap.bundle.min.js') }}"></script>

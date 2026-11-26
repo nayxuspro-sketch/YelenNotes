@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon %}
 {% block title %}Barèmes, Calculs & Appréciations{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Règles pédagogiques de calcul & Grille des appréciations</h1>
-        <small class="text-muted">Tous les paramètres de calcul sont définis et validés par l'établissement (§6, §9.3, §22 CdC)</small>
+        <h1 class="yn-page-title mb-1">Règles pédagogiques de calcul & Grille des appréciations</h1>
+        <p class="text-muted small mb-0">Définissez les barèmes, arrondis, règles d'absence, ex æquo et intervalles d'appréciation.</p>
     </div>
 
     {% if all_years %}
@@ -25,7 +26,7 @@
         </select>
         {% if target_class %}
         <a href="{{ url_for('academics.class_subjects', class_id=target_class.id) }}" class="btn btn-sm btn-outline-primary">
-            Matières & barèmes ({{ target_class.name }})
+            {{ icon('book-open', 14) }} Matières & barèmes ({{ target_class.name }})
         </a>
         {% endif %}
     </form>
@@ -33,21 +34,25 @@
 </div>
 
 {% if not selected_year %}
-<div class="alert alert-warning">
-    Veuillez d'abord <a href="{{ url_for('settings.school_years') }}">créer une année scolaire</a>.
+<div class="alert alert-warning d-flex align-items-center gap-2">
+    {{ icon('alert-triangle', 17) }}
+    <span>Veuillez d'abord <a href="{{ url_for('settings.school_years') }}">créer une année scolaire</a>.</span>
 </div>
 {% else %}
 
 {% if using_inherited_policy and target_class %}
-<div class="alert alert-info py-2 small">
-    La classe <strong>{{ target_class.name }}</strong> hérite actuellement du barème général de l'année ({{ selected_year.label }}).
-    {% if can_edit %}Vous pouvez ajuster et enregistrer ci-dessous un barème ou une grille d'appréciations propres à cette classe.{% endif %}
+<div class="alert alert-info py-2 small d-flex align-items-center gap-2">
+    {{ icon('info', 16) }}
+    <span>
+        La classe <strong>{{ target_class.name }}</strong> hérite actuellement du barème général de l'année ({{ selected_year.label }}).
+        {% if can_edit %}Vous pouvez ajuster et enregistrer ci-dessous un barème ou une grille d'appréciations propres à cette classe.{% endif %}
+    </span>
 </div>
 {% endif %}
 
 {% if scale_warnings %}
 <div class="alert alert-warning">
-    <div class="fw-bold mb-1">Signalement sur la grille d'appréciations actuelle :</div>
+    <div class="fw-semibold mb-1 d-flex align-items-center gap-2">{{ icon('alert-triangle', 16) }} Signalement sur la grille d'appréciations actuelle :</div>
     <ul class="mb-0 small">
         {% for w in scale_warnings %}<li>{{ w }}</li>{% endfor %}
     </ul>
@@ -62,19 +67,20 @@
     <div class="row g-4">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header">
-                    1. Paramètres de calcul ({{ target_class.name if target_class else 'Année ' + selected_year.label }})
+                <div class="card-header d-flex align-items-center gap-2">
+                    {{ icon('sliders', 17) }}
+                    <span>1. Paramètres de calcul ({{ target_class.name if target_class else 'Année ' + selected_year.label }})</span>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
                         <div class="col-sm-6">
-                            <label class="form-label fw-semibold" for="general_average_scale">Barème de la moyenne générale *</label>
+                            <label class="form-label" for="general_average_scale">Barème de la moyenne générale <span class="text-danger">*</span></label>
                             <input type="text" id="general_average_scale" name="general_average_scale" class="form-control"
                                    value="{{ (policy.general_average_scale | compact_fr) if policy else '' }}"
                                    placeholder="ex. 10 ou 20" required {% if not can_edit %}disabled{% endif %}>
                         </div>
                         <div class="col-sm-6">
-                            <label class="form-label fw-semibold" for="decimal_places">Nombre de décimales affichées</label>
+                            <label class="form-label" for="decimal_places">Nombre de décimales affichées</label>
                             <select id="decimal_places" name="decimal_places" class="form-select" {% if not can_edit %}disabled{% endif %}>
                                 {% set cur_dec = policy.decimal_places if policy else 2 %}
                                 {% for d in [0, 1, 2, 3] %}
@@ -85,7 +91,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="rounding_mode">Méthode d'arrondi</label>
+                        <label class="form-label" for="rounding_mode">Méthode d'arrondi</label>
                         {% set cur_rnd = policy.rounding_mode if policy else 'ROUND_HALF_UP' %}
                         <select id="rounding_mode" name="rounding_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
                             <option value="ROUND_HALF_UP" {% if cur_rnd == 'ROUND_HALF_UP' %}selected{% endif %}>Arrondi commercial au supérieur à 0,5 (ROUND_HALF_UP)</option>
@@ -95,7 +101,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="absence_policy">Traitement d'une absence (ABS) à une évaluation</label>
+                        <label class="form-label" for="absence_policy">Traitement d'une absence (ABS) à une évaluation</label>
                         {% set cur_abs = policy.absence_policy if policy else 'ZERO' %}
                         <select id="absence_policy" name="absence_policy" class="form-select" {% if not can_edit %}disabled{% endif %}>
                             <option value="ZERO" {% if cur_abs == 'ZERO' %}selected{% endif %}>Compter 0 dans la matière (coefficient maintenu)</option>
@@ -106,7 +112,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="tie_breaking_mode">Règle de classement des ex æquo</label>
+                        <label class="form-label" for="tie_breaking_mode">Règle de classement des ex æquo</label>
                         {% set cur_tie = policy.tie_breaking_mode if policy else 'COMPETITION' %}
                         <select id="tie_breaking_mode" name="tie_breaking_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
                             <option value="COMPETITION" {% if cur_tie == 'COMPETITION' %}selected{% endif %}>Rang partagé avec saut (1er, 1er ex, 3e)</option>
@@ -115,7 +121,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="annual_average_mode">Calcul de la moyenne annuelle</label>
+                        <label class="form-label" for="annual_average_mode">Calcul de la moyenne annuelle</label>
                         {% set cur_ann = policy.annual_average_mode if policy else 'SIMPLE' %}
                         <select id="annual_average_mode" name="annual_average_mode" class="form-select" {% if not can_edit %}disabled{% endif %}>
                             <option value="SIMPLE" {% if cur_ann == 'SIMPLE' %}selected{% endif %}>Moyenne arithmétique simple des périodes</option>
@@ -138,13 +144,13 @@
         <div class="col-lg-6">
             <div class="card h-100">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <span>2. Grille des appréciations</span>
+                    <span class="d-flex align-items-center gap-2">{{ icon('award', 17) }} 2. Grille des appréciations</span>
                     {% if can_edit %}
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" id="btn-preset-scale-10" class="btn btn-outline-secondary" title="Pré-remplir une grille indicative sur 10 modifiable">
+                    <div class="d-flex gap-1">
+                        <button type="button" id="btn-preset-scale-10" class="btn btn-sm btn-outline-secondary" title="Pré-remplir une grille indicative sur 10 modifiable">
                             Exemple /10
                         </button>
-                        <button type="button" id="btn-preset-scale-20" class="btn btn-outline-secondary" title="Pré-remplir une grille indicative sur 20 modifiable">
+                        <button type="button" id="btn-preset-scale-20" class="btn btn-sm btn-outline-secondary" title="Pré-remplir une grille indicative sur 20 modifiable">
                             Exemple /20
                         </button>
                     </div>
@@ -154,7 +160,6 @@
                     <p class="small text-muted">
                         Convention : chaque intervalle couvre <code>[Borne min ; Borne max[</code> (borne basse incluse, borne haute exclue),
                         sauf le dernier intervalle supérieur qui inclut la note maximale <code>[Borne min ; Barème]</code>.
-                        Les chevauchements sont bloqués automatiquement.
                     </p>
 
                     <div class="table-responsive">
@@ -198,8 +203,8 @@
                     </div>
 
                     {% if can_edit %}
-                    <button type="button" id="btn-add-scale-row" class="btn btn-sm btn-outline-primary">
-                        + Ajouter un intervalle
+                    <button type="button" id="btn-add-scale-row" class="btn btn-sm btn-outline-primary mt-2">
+                        {{ icon('plus', 14) }} Ajouter un intervalle
                     </button>
                     {% endif %}
                 </div>
@@ -208,7 +213,7 @@
     </div>
 
     {% if can_edit %}
-    <div class="mt-3 d-flex justify-content-between">
+    <div class="mt-4 d-flex flex-wrap justify-content-between gap-2">
         <div>
             {% if target_class and has_class_override %}
             <button type="submit" name="action" value="delete_override" class="btn btn-outline-danger"
@@ -217,7 +222,9 @@
             </button>
             {% endif %}
         </div>
-        <button type="submit" class="btn btn-primary px-4">Enregistrer les règles et la grille</button>
+        <button type="submit" class="btn btn-primary px-4">
+            {{ icon('check', 16) }} Enregistrer les règles et la grille
+        </button>
     </div>
     {% endif %}
 </form>

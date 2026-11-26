@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Tableau synoptique des résultats scolaires{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-print">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3 no-print">
     <div>
-        <h1 class="h4 fw-bold mb-0">Tableau synoptique des résultats scolaires</h1>
-        <small class="text-muted">Fiche statistique par période d'évaluation et par discipline (Garçons / Filles / Total)</small>
+        <h1 class="yn-page-title mb-1">Tableau synoptique des résultats scolaires</h1>
+        <p class="text-muted small mb-0">Fiche statistique officielle par période d'évaluation et par discipline (Garçons / Filles / Total).</p>
     </div>
 
     {% if synoptic %}
@@ -14,31 +15,30 @@
            class="btn btn-sm btn-outline-secondary" title="Recalculer en temps réel à partir des notes actuelles">
             Actualiser
         </a>
-        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">
-            Imprimer
+        <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+            {{ icon('printer', 15) }} Imprimer
         </button>
         <a href="{{ url_for('reports.synoptic_report_pdf', class_id=selected_class.id, period_id=selected_period.id, subject_id=selected_subject_id, orientation=orientation, inline=1) }}"
            target="_blank" class="btn btn-sm btn-outline-primary">
-            Aperçu PDF
+            {{ icon('file-text', 15) }} Aperçu PDF
         </a>
         <a href="{{ url_for('reports.synoptic_report_pdf', class_id=selected_class.id, period_id=selected_period.id, subject_id=selected_subject_id, orientation=orientation) }}"
            class="btn btn-sm btn-primary">
-            Exporter PDF
+            {{ icon('download', 15) }} Exporter PDF
         </a>
         <a href="{{ url_for('reports.synoptic_report_excel', class_id=selected_class.id, period_id=selected_period.id, subject_id=selected_subject_id) }}"
-           class="btn btn-sm btn-outline-success">
-            Exporter Excel (.xlsx)
+           class="btn btn-sm btn-outline-secondary">
+            {{ icon('file-spreadsheet', 15) }} Exporter Excel (.xlsx)
         </a>
     </div>
     {% endif %}
 </div>
 
-{# Barre de sélection des paramètres (§2 & §6.1) #}
 <div class="card mb-3 no-print">
-    <div class="card-body py-2">
+    <div class="card-body py-2 px-3">
         <form method="get" action="{{ url_for('reports.synoptic_report') }}" class="row g-2 align-items-end">
             <div class="col-md-2">
-                <label class="form-label small fw-semibold mb-1">Année scolaire</label>
+                <label class="form-label mb-1">Année scolaire</label>
                 <select name="year_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     {% for yr in all_years %}
                     <option value="{{ yr.id }}" {% if selected_year and yr.id == selected_year.id %}selected{% endif %}>
@@ -48,7 +48,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small fw-semibold mb-1">Classe</label>
+                <label class="form-label mb-1">Classe</label>
                 <select name="class_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     {% for cls in classes %}
                     <option value="{{ cls.id }}" {% if selected_class and cls.id == selected_class.id %}selected{% endif %}>
@@ -58,7 +58,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label small fw-semibold mb-1">Période d'évaluation</label>
+                <label class="form-label mb-1">Période d'évaluation</label>
                 <select name="period_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     {% for p in periods %}
                     <option value="{{ p.id }}" {% if selected_period and p.id == selected_period.id %}selected{% endif %}>
@@ -68,7 +68,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold mb-1">Discipline(s)</label>
+                <label class="form-label mb-1">Discipline(s)</label>
                 <select name="subject_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="">Toutes les disciplines</option>
                     {% if synoptic %}
@@ -81,7 +81,7 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold mb-1">Orientation PDF</label>
+                <label class="form-label mb-1">Orientation PDF</label>
                 <select name="orientation" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="landscape" {% if orientation == 'landscape' %}selected{% endif %}>Paysage (A4)</option>
                     <option value="portrait" {% if orientation == 'portrait' %}selected{% endif %}>Portrait (A4)</option>
@@ -93,8 +93,7 @@
 
 {% if synoptic %}
 <div class="yn-synoptic-sheet">
-    {# EN-TÊTE ADMINISTRATIF OFFICIEL (§5) #}
-    <div class="row align-items-center pb-2 mb-3 border-bottom border-dark border-2">
+    <div class="row align-items-center pb-2 mb-3 border-bottom border-2">
         <div class="col-5 text-center small">
             <div class="fw-bold text-uppercase">{{ settings.country or 'Burkina Faso' }}</div>
             <div>———</div>
@@ -118,7 +117,7 @@
     </div>
 
     <div class="text-center mb-3">
-        <h2 class="h5 fw-bold text-uppercase mb-1" style="letter-spacing: 0.03em;">
+        <h2 class="h5 fw-bold text-uppercase mb-1" style="letter-spacing: 0.03em; color: #0f172a;">
             TABLEAU SYNOPTIQUE DES RÉSULTATS SCOLAIRES
         </h2>
         <div class="small">
@@ -137,7 +136,6 @@
         </div>
     </div>
 
-    {# CORPS DU DOCUMENT : TABLEAU UNIQUE REGROUPANT TOUTES LES DISCIPLINES (§3 & §5) #}
     <div class="table-responsive">
         <table class="yn-synoptic-table">
             <thead>
@@ -239,7 +237,6 @@
         </table>
     </div>
 
-    {# PIED DE PAGE OFFICIEL : DATE DE GÉNÉRATION, SIGNATURE DU RESPONSABLE ET CACHET (§5) #}
     <div class="mt-4 pt-2">
         <div class="small text-muted fst-italic mb-3">
             Fiche générée le {{ generated_at.strftime('%d/%m/%Y à %H:%M') }}.
@@ -269,8 +266,8 @@
     </div>
 </div>
 {% else %}
-<div class="alert alert-info">
-    Veuillez sélectionner une année scolaire, une classe et une période d'évaluation configurées pour afficher le tableau synoptique.
+<div class="card">
+    {{ empty_state('bar-chart-3', 'Tableau synoptique non disponible', 'Veuillez sélectionner une année scolaire, une classe et une période d’évaluation configurées.') }}
 </div>
 {% endif %}
 {% endblock %}

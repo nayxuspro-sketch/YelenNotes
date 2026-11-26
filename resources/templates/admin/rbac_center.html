@@ -1,59 +1,60 @@
 {% extends "base.html" %}
+{% from "components/ui.html" import icon, empty_state %}
 {% block title %}Gestion des rôles et permissions (RBAC){% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
     <div>
-        <h1 class="h4 fw-bold mb-0">Administration — Gestion centralisée des rôles et permissions (RBAC)</h1>
-        <small class="text-muted">
-            Principe du moindre privilège • Refus par défaut (Default Deny) • Effet immédiat • Traçabilité complète (§1–§11 RBAC)
-        </small>
+        <h1 class="yn-page-title mb-1">Administration — Gestion centralisée des rôles et permissions (RBAC)</h1>
+        <p class="text-muted small mb-0">
+            Principe du moindre privilège · Refus par défaut (Default Deny) · Effet immédiat · Traçabilité complète.
+        </p>
     </div>
     <div class="d-flex gap-2">
         {% if can_perm('users.view') %}
         <a href="{{ url_for('admin.users_manage') }}" class="btn btn-sm btn-outline-primary">
-            Comptes utilisateurs
+            {{ icon('users', 15) }} Comptes utilisateurs
         </a>
         {% endif %}
         {% if can_perm('audit.export') %}
-        <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-success">
-            Exporter journal d'audit (.csv)
+        <a href="{{ url_for('rbac_admin.export_audit_logs_csv') }}" class="btn btn-sm btn-outline-secondary">
+            {{ icon('download', 15) }} Exporter journal (.csv)
         </a>
         {% endif %}
     </div>
 </div>
 
-<!-- Navigation des 5 sous-espaces RBAC (§10) -->
-<ul class="nav nav-tabs mb-3">
+<!-- Navigation des 5 sous-espaces RBAC -->
+<ul class="nav nav-tabs mb-4">
     <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'roles' %}active fw-semibold{% endif %}"
+        <a class="nav-link {% if active_tab == 'roles' %}active{% endif %}"
            href="{{ url_for('rbac_admin.index', tab='roles', role_id=selected_role.id if selected_role else None) }}">
             1. Rôles ({{ roles | length }})
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'matrix' %}active fw-semibold{% endif %}"
+        <a class="nav-link {% if active_tab == 'matrix' %}active{% endif %}"
            href="{{ url_for('rbac_admin.index', tab='matrix', role_id=selected_role.id if selected_role else None) }}">
             2. Matrice des permissions
         </a>
     </li>
     {% if can_perm('users.view') %}
     <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'users' %}active fw-semibold{% endif %}"
+        <a class="nav-link {% if active_tab == 'users' %}active{% endif %}"
            href="{{ url_for('rbac_admin.index', tab='users') }}">
             3. Utilisateurs & Droits effectifs ({{ scoped_users | length }})
         </a>
     </li>
     {% endif %}
     <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'establishments' %}active fw-semibold{% endif %}"
+        <a class="nav-link {% if active_tab == 'establishments' %}active{% endif %}"
            href="{{ url_for('rbac_admin.index', tab='establishments') }}">
             4. Établissements ({{ establishments | length }})
         </a>
     </li>
     {% if can_perm('audit.view') %}
     <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'audit' %}active fw-semibold{% endif %}"
+        <a class="nav-link {% if active_tab == 'audit' %}active{% endif %}"
            href="{{ url_for('rbac_admin.index', tab='audit') }}">
             5. Journal RBAC & Sécurité
         </a>
@@ -66,25 +67,28 @@
     {% if can_create_rbac %}
     <div class="col-xl-4">
         <div class="card">
-            <div class="card-header fw-semibold">Créer un rôle personnalisé</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('plus', 17) }}
+                <span>Créer un rôle personnalisé</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('rbac_admin.create_role_route') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Nom du rôle *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Nom du rôle <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control form-control-sm" required placeholder="ex. Censeur pédagogique">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Code technique unique *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Code technique unique <span class="text-danger">*</span></label>
                         <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. CENSEUR_PEDAGOGIQUE">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Description métier *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Description métier <span class="text-danger">*</span></label>
                         <textarea name="description" class="form-control form-control-sm" rows="2"
                                   placeholder="Décrivez précisément le périmètre et les responsabilités de ce rôle"></textarea>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Copier initialement les permissions d'un rôle (facultatif)</label>
+                        <label class="form-label">Copier initialement les permissions d'un rôle</label>
                         <select name="copy_from_role_id" class="form-select form-select-sm">
                             <option value="">— Partir de zéro (aucune permission par défaut) —</option>
                             {% for r in roles %}
@@ -94,7 +98,9 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer et configurer dans la matrice</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        {{ icon('plus', 15) }} Créer et configurer dans la matrice
+                    </button>
                 </form>
             </div>
         </div>
@@ -103,15 +109,24 @@
 
     <div class="{{ 'col-xl-8' if can_create_rbac else 'col-12' }}">
         <div class="card">
-            <div class="card-header fw-semibold">Catalogue des rôles du système</div>
+            <div class="yn-table-toolbar">
+                <div class="fw-semibold d-flex align-items-center gap-2">
+                    {{ icon('shield-check', 17) }}
+                    <span>Catalogue des rôles du système ({{ roles | length }})</span>
+                </div>
+                <div class="yn-search-box">
+                    {{ icon('search', 14) }}
+                    <input type="search" class="form-control form-control-sm" placeholder="Rechercher un rôle…" data-yn-table-filter="#rbac-roles-table">
+                </div>
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0" id="rbac-roles-table">
                     <thead>
                         <tr>
-                            <th>Rôle & Code</th>
+                            <th class="yn-sortable">Rôle & Code</th>
                             <th>Description</th>
-                            <th class="text-center">Permissions</th>
-                            <th class="text-center">Utilisateurs</th>
+                            <th class="text-center yn-sortable">Permissions</th>
+                            <th class="text-center yn-sortable">Utilisateurs</th>
                             <th class="text-center">Statut</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -123,23 +138,23 @@
                                 <div class="fw-semibold">{{ r.name }}</div>
                                 <code>{{ r.code }}</code>
                                 {% if r.is_system %}
-                                <span class="badge text-bg-light border text-muted ms-1">Prédéfini</span>
+                                <span class="badge text-bg-secondary ms-1">Prédéfini</span>
                                 {% endif %}
                             </td>
                             <td class="small text-muted" style="max-width: 280px;">
                                 {{ r.description or '—' }}
-                                <div style="font-size: 0.72rem;" class="mt-1">
+                                <div style="font-size: 0.72rem;" class="mt-1 yn-tabular">
                                     MAJ : {{ r.updated_at | datetime_fr }}
                                 </div>
                             </td>
                             <td class="text-center">
                                 {% if r.code == 'SUPER_ADMIN' %}
-                                <span class="badge text-bg-dark">Toutes</span>
+                                <span class="badge text-bg-primary">Toutes</span>
                                 {% else %}
-                                <span class="badge text-bg-primary">{{ r.role_permissions | length }}</span>
+                                <span class="badge text-bg-primary yn-tabular">{{ r.role_permissions | length }}</span>
                                 {% endif %}
                             </td>
-                            <td class="text-center">
+                            <td class="text-center yn-tabular">
                                 <span class="fw-semibold">{{ role_user_counts.get(r.id, 0) }}</span>
                             </td>
                             <td class="text-center">
@@ -173,7 +188,7 @@
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <div class="row g-2 mb-2">
                                                 <div class="col-sm-6">
-                                                    <label class="form-label small fw-semibold">Nom du rôle</label>
+                                                    <label class="form-label small">Nom du rôle</label>
                                                     <input type="text" name="name" class="form-control form-control-sm" value="{{ r.name }}" required>
                                                 </div>
                                                 <div class="col-sm-6 d-flex align-items-end">
@@ -191,10 +206,10 @@
                                                 </div>
                                             </div>
                                             <div class="mb-2">
-                                                <label class="form-label small fw-semibold">Description</label>
+                                                <label class="form-label small">Description</label>
                                                 <input type="text" name="description" class="form-control form-control-sm" value="{{ r.description or '' }}">
                                             </div>
-                                            <button type="submit" class="btn btn-sm btn-primary">Enregistrer</button>
+                                            <button type="submit" class="btn btn-sm btn-primary">{{ icon('check', 14) }} Enregistrer</button>
                                         </form>
                                     </div>
                                     <div class="col-md-5 border-start">
@@ -202,7 +217,7 @@
                                         <form method="post" action="{{ url_for('rbac_admin.delete_role_route', role_id=r.id) }}"
                                               onsubmit="return confirm('Confirmer la suppression du rôle {{ r.name }} ?');">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <label class="form-label small fw-semibold text-danger">Supprimer ce rôle</label>
+                                            <label class="form-label small text-danger">Supprimer ce rôle</label>
                                             {% if role_user_counts.get(r.id, 0) > 0 %}
                                             <div class="mb-2">
                                                 <small class="text-muted d-block mb-1">
@@ -261,7 +276,7 @@
 
     {% if selected_role %}
     <div class="card-body pb-2">
-        <div class="alert alert-light border py-2 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="p-3 rounded border bg-light mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
                 <strong>{{ selected_role.name }}</strong> (<code>{{ selected_role.code }}</code>) —
                 <span class="text-muted small">{{ selected_role.description }}</span>
@@ -270,8 +285,9 @@
         </div>
 
         {% if selected_role.code == 'SUPER_ADMIN' %}
-        <div class="alert alert-info py-2 small">
-            Le rôle <strong>Super administrateur</strong> dispose par conception d'un accès complet sur l'ensemble des modules et établissements (§8 RBAC). Ses permissions sont toutes actives et verrouillées contre la désactivation accidentelle.
+        <div class="alert alert-info py-2 small d-flex align-items-center gap-2">
+            {{ icon('shield-check', 16) }}
+            <span>Le rôle <strong>Super administrateur</strong> dispose par conception d'un accès complet sur l'ensemble des modules et établissements. Ses permissions sont toutes actives et verrouillées contre la désactivation accidentelle.</span>
         </div>
         {% endif %}
     </div>
@@ -284,9 +300,9 @@
                     <tr>
                         <th style="min-width: 210px;">Module fonctionnel</th>
                         {% for act in action_codes %}
-                        <th class="text-center" style="min-width: 88px;">
-                            <div class="small fw-bold">{{ action_labels.get(act, act) }}</div>
-                            <code style="font-size: 0.68rem;" class="text-muted">{{ act }}</code>
+                        <th class="text-center" style="min-width: 88px; text-transform: none;">
+                            <div class="small fw-semibold">{{ action_labels.get(act, act) }}</div>
+                            <code style="font-size: 0.68rem;">{{ act }}</code>
                         </th>
                         {% endfor %}
                         {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
@@ -300,7 +316,7 @@
                     <tr data-module-row="{{ row.module }}">
                         <td>
                             <div class="fw-semibold">{{ row.module_label }}</div>
-                            <code style="font-size: 0.72rem;" class="text-muted">{{ row.module }}</code>
+                            <code style="font-size: 0.72rem;">{{ row.module }}</code>
                         </td>
                         {% for act in action_codes %}
                         {% set perms_in_cell = row.by_action.get(act, []) %}
@@ -329,11 +345,11 @@
                         {% endfor %}
                         {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
                         <td class="text-center">
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-primary py-0 px-2"
-                                        onclick="toggleModuleRow('{{ row.module }}', true)" title="Tout cocher pour {{ row.module_label }}">✓</button>
-                                <button type="button" class="btn btn-outline-secondary py-0 px-2"
-                                        onclick="toggleModuleRow('{{ row.module }}', false)" title="Tout décocher pour {{ row.module_label }}">✕</button>
+                            <div class="d-inline-flex gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2"
+                                        onclick="toggleModuleRow('{{ row.module }}', true)" title="Tout cocher pour {{ row.module_label }}">Oui</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                        onclick="toggleModuleRow('{{ row.module }}', false)" title="Tout décocher pour {{ row.module_label }}">Non</button>
                             </div>
                         </td>
                         {% endif %}
@@ -344,25 +360,24 @@
         </div>
 
         {% if can_update_rbac and selected_role.code != 'SUPER_ADMIN' %}
-        <div class="card-footer d-flex justify-content-between align-items-center bg-light">
+        <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span class="small text-muted">
                 Toute modification prend effet <strong>immédiatement</strong> sur les sessions actives et est inscrite au journal d'audit.
             </span>
             <button type="submit" class="btn btn-primary">
-                Enregistrer la matrice de « {{ selected_role.name }} »
+                {{ icon('check', 15) }} Enregistrer la matrice de « {{ selected_role.name }} »
             </button>
         </div>
         {% endif %}
     </form>
 
-    <!-- Utilisateurs assignés à ce rôle (§5) -->
     <div class="card-body border-top">
-        <h2 class="h6 fw-bold mb-2">Utilisateurs actuellement associés au rôle « {{ selected_role.name }} » ({{ role_users | length }})</h2>
+        <h2 class="h6 fw-semibold mb-2">Utilisateurs actuellement associés au rôle « {{ selected_role.name }} » ({{ role_users | length }})</h2>
         {% if role_users %}
         <div class="d-flex flex-wrap gap-2">
             {% for u in role_users %}
             <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
-               class="badge text-bg-light border text-dark text-decoration-none p-2">
+               class="badge text-bg-secondary text-decoration-none p-2">
                 <code>{{ u.username }}</code> — {{ u.full_name }}
                 {% if not u.is_active %}<span class="text-danger">(Inactif)</span>{% endif %}
             </a>
@@ -377,28 +392,31 @@
 
 {% if user_is_super_admin and can_create_rbac %}
 <div class="card">
-    <div class="card-header fw-semibold">Extensibilité (§1.4) — Déclarer une nouvelle permission granulaire</div>
+    <div class="card-header d-flex align-items-center gap-2">
+        {{ icon('sliders', 17) }}
+        <span>Extensibilité — Déclarer une nouvelle permission granulaire</span>
+    </div>
     <div class="card-body">
         <form method="post" action="{{ url_for('rbac_admin.create_permission_route') }}" class="row g-2 align-items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Code unique *</label>
+                <label class="form-label">Code unique *</label>
                 <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. cantine.view">
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Clé module *</label>
+                <label class="form-label">Clé module *</label>
                 <input type="text" name="module" class="form-control form-control-sm" required placeholder="ex. cantine">
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Libellé module *</label>
+                <label class="form-label">Libellé module *</label>
                 <input type="text" name="module_label" class="form-control form-control-sm" required placeholder="ex. Cantine scolaire">
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Ressource *</label>
+                <label class="form-label">Ressource *</label>
                 <input type="text" name="resource" class="form-control form-control-sm" required placeholder="ex. Repas">
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Action *</label>
+                <label class="form-label">Action *</label>
                 <select name="action" class="form-select form-select-sm">
                     {% for act in action_codes %}
                     <option value="{{ act }}">{{ action_labels.get(act, act) }} ({{ act }})</option>
@@ -406,11 +424,13 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label small fw-semibold">Description *</label>
+                <label class="form-label">Description *</label>
                 <input type="text" name="description" class="form-control form-control-sm" required placeholder="Consulter la cantine">
             </div>
             <div class="col-12 text-end">
-                <button type="submit" class="btn btn-sm btn-outline-primary">Ajouter au catalogue des permissions</button>
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    {{ icon('plus', 14) }} Ajouter au catalogue des permissions
+                </button>
             </div>
         </form>
     </div>
@@ -419,14 +439,14 @@
 
 <script>
 function toggleModuleRow(mod, checked) {
-    const row = document.querySelector('tr[data-module-row="' + mod + '"]');
+    var row = document.querySelector('tr[data-module-row="' + mod + '"]');
     if (!row) return;
-    row.querySelectorAll('input.yn-perm-chk:not(:disabled)').forEach(function(cb) {
+    Array.prototype.slice.call(row.querySelectorAll('input.yn-perm-chk:not(:disabled)')).forEach(function(cb) {
         cb.checked = checked;
     });
 }
 function toggleAllMatrix(checked) {
-    document.querySelectorAll('input.yn-perm-chk:not(:disabled)').forEach(function(cb) {
+    Array.prototype.slice.call(document.querySelectorAll('input.yn-perm-chk:not(:disabled)')).forEach(function(cb) {
         cb.checked = checked;
     });
 }
@@ -434,16 +454,20 @@ function toggleAllMatrix(checked) {
 
 {% elif active_tab == 'users' and can_perm('users.view') %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span class="fw-semibold">Vue synthétique des utilisateurs, rôles cumulés et surcharges individuelles</span>
-        <a href="{{ url_for('admin.users_manage') }}" class="btn btn-sm btn-primary">Créer / modifier un utilisateur</a>
+    <div class="yn-table-toolbar">
+        <span class="fw-semibold d-flex align-items-center gap-2">
+            {{ icon('users', 17) }} Vue synthétique des utilisateurs, rôles cumulés et surcharges
+        </span>
+        <a href="{{ url_for('admin.users_manage') }}" class="btn btn-sm btn-primary">
+            {{ icon('user-plus', 14) }} Créer / modifier un utilisateur
+        </a>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Utilisateur</th>
-                    <th>Établissement</th>
+                    <th class="yn-sortable">Utilisateur</th>
+                    <th class="yn-sortable">Établissement</th>
                     <th>Rôles attribués</th>
                     <th class="text-center">Surcharges individuelles</th>
                     <th class="text-center">Statut</th>
@@ -459,14 +483,14 @@ function toggleAllMatrix(checked) {
                     <td class="small">{{ u.establishment.name if u.establishment else 'Global / Défaut' }}</td>
                     <td>
                         {% for r in u.active_roles %}
-                        <span class="badge text-bg-light border text-dark me-1">{{ r.name }}</span>
+                        <span class="badge text-bg-secondary me-1">{{ r.name }}</span>
                         {% else %}
                         <span class="badge text-bg-secondary">Aucun rôle actif</span>
                         {% endfor %}
                     </td>
                     <td class="text-center">
                         {% if u.permission_overrides | length > 0 %}
-                        <span class="badge text-bg-warning text-dark">{{ u.permission_overrides | length }} dérogation(s)</span>
+                        <span class="badge text-bg-warning">{{ u.permission_overrides | length }} dérogation(s)</span>
                         {% else %}
                         <span class="text-muted small">0</span>
                         {% endif %}
@@ -475,7 +499,7 @@ function toggleAllMatrix(checked) {
                         {% if not u.is_active %}
                         <span class="badge text-bg-secondary">Désactivé</span>
                         {% elif u.is_suspended() %}
-                        <span class="badge text-bg-warning text-dark">Suspendu</span>
+                        <span class="badge text-bg-warning">Suspendu</span>
                         {% else %}
                         <span class="badge text-bg-success">Actif</span>
                         {% endif %}
@@ -483,7 +507,7 @@ function toggleAllMatrix(checked) {
                     <td class="text-end">
                         <a href="{{ url_for('rbac_admin.inspect_user_permissions', user_id=u.id) }}"
                            class="btn btn-sm btn-outline-primary">
-                            Voir permissions effectives →
+                            Voir permissions effectives {{ icon('chevron-right', 14) }}
                         </a>
                     </td>
                 </tr>
@@ -498,27 +522,32 @@ function toggleAllMatrix(checked) {
     {% if user_is_super_admin %}
     <div class="col-xl-4">
         <div class="card">
-            <div class="card-header fw-semibold">Ajouter un établissement (Multi-établissements §8)</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('building-2', 17) }}
+                <span>Ajouter un établissement</span>
+            </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('rbac_admin.create_establishment') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Code unique *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Code unique <span class="text-danger">*</span></label>
                         <input type="text" name="code" class="form-control form-control-sm" required placeholder="ex. ETAB-ANNEXE-B">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">Nom de l'établissement *</label>
+                    <div class="mb-3">
+                        <label class="form-label">Nom de l'établissement <span class="text-danger">*</span></label>
                         <input type="text" name="name" class="form-control form-control-sm" required placeholder="ex. École Primaire Annexe B">
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small fw-semibold">CEB / Circonscription</label>
+                    <div class="mb-3">
+                        <label class="form-label">CEB / Circonscription</label>
                         <input type="text" name="ceb" class="form-control form-control-sm" placeholder="ex. CEB de Ouaga II">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Localité</label>
+                        <label class="form-label">Localité</label>
                         <input type="text" name="locality" class="form-control form-control-sm" placeholder="ex. Ouagadougou">
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm w-100">Créer l'établissement</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        {{ icon('plus', 14) }} Créer l'établissement
+                    </button>
                 </form>
             </div>
         </div>
@@ -527,13 +556,16 @@ function toggleAllMatrix(checked) {
 
     <div class="{{ 'col-xl-8' if user_is_super_admin else 'col-12' }}">
         <div class="card">
-            <div class="card-header fw-semibold">Périmètres d'établissement enregistrés</div>
+            <div class="card-header d-flex align-items-center gap-2">
+                {{ icon('building-2', 17) }}
+                <span>Périmètres d'établissement enregistrés</span>
+            </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Code</th>
-                            <th>Nom de l'établissement</th>
+                            <th class="yn-sortable">Code</th>
+                            <th class="yn-sortable">Nom de l'établissement</th>
                             <th>CEB / Localité</th>
                             <th class="text-center">Statut</th>
                         </tr>
@@ -543,7 +575,7 @@ function toggleAllMatrix(checked) {
                         <tr>
                             <td><code>{{ est.code }}</code></td>
                             <td class="fw-semibold">{{ est.name }}</td>
-                            <td class="small text-muted">{{ est.ceb or '—' }} {% if est.locality %}• {{ est.locality }}{% endif %}</td>
+                            <td class="small text-muted">{{ est.ceb or '—' }} {% if est.locality %}· {{ est.locality }}{% endif %}</td>
                             <td class="text-center">
                                 <span class="badge {% if est.is_active %}text-bg-success{% else %}text-bg-secondary{% endif %}">
                                     {{ 'Actif' if est.is_active else 'Inactif' }}
@@ -560,16 +592,20 @@ function toggleAllMatrix(checked) {
 
 {% elif active_tab == 'audit' and can_perm('audit.view') %}
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span class="fw-semibold">Journal de sécurité RBAC et tentatives d'accès refusées (lecture seule)</span>
-        <a href="{{ url_for('admin.audit_logs_view') }}" class="btn btn-sm btn-outline-secondary">Journal complet →</a>
+    <div class="yn-table-toolbar">
+        <span class="fw-semibold d-flex align-items-center gap-2">
+            {{ icon('activity', 17) }} Journal de sécurité RBAC et tentatives d'accès refusées
+        </span>
+        <a href="{{ url_for('admin.audit_logs_view') }}" class="btn btn-sm btn-outline-secondary">
+            Journal complet {{ icon('chevron-right', 14) }}
+        </a>
     </div>
     <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Horodatage</th>
-                    <th>Acteur</th>
+                    <th class="yn-sortable">Horodatage</th>
+                    <th class="yn-sortable">Acteur</th>
                     <th>Rôle</th>
                     <th>Module</th>
                     <th>Action</th>
@@ -579,12 +615,12 @@ function toggleAllMatrix(checked) {
             </thead>
             <tbody>
                 {% for lg in rbac_logs %}
-                <tr class="{% if lg.status == 'DENIED' %}table-warning{% endif %}">
-                    <td class="small text-nowrap">{{ lg.created_at | datetime_fr }}</td>
+                <tr>
+                    <td class="small text-nowrap yn-tabular">{{ lg.created_at | datetime_fr }}</td>
                     <td><code>{{ lg.username_snapshot }}</code></td>
                     <td class="small">{{ lg.role_snapshot or '—' }}</td>
                     <td class="small"><code>{{ lg.module }}</code></td>
-                    <td><span class="badge text-bg-light border text-dark">{{ lg.action }}</span></td>
+                    <td><span class="badge text-bg-secondary">{{ lg.action }}</span></td>
                     <td>
                         {% if lg.status == 'DENIED' %}
                         <span class="badge text-bg-danger">REFUSÉ</span>
@@ -595,7 +631,11 @@ function toggleAllMatrix(checked) {
                     <td class="small">{{ lg.summary }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="text-center py-4 text-muted">Aucun événement RBAC enregistré.</td></tr>
+                <tr>
+                    <td colspan="7">
+                        {{ empty_state('shield-check', 'Aucun événement RBAC enregistré') }}
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
