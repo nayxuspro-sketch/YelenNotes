@@ -1470,8 +1470,8 @@ def generate_end_of_year_proposition_pdf(
             prop_html = f"<font color='#065F46'><b>{_safe(row.auto_proposition)}</b></font>"
             style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#ECFDF5")))
         elif row.auto_proposition == PROPOSITION_REDOUBLE:
-            prop_html = f"<font color='#991B1B'><b>{_safe(row.auto_proposition)}</b></font>"
-            style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#FEF2F2")))
+            # La fiche officielle laisse la cellule vide pour une proposition de redoublement.
+            prop_html = ""
         else:
             prop_html = f"<font color='#4B5563'><i>{_safe(row.auto_proposition)}</i></font>"
             style_cmds.append(("BACKGROUND", (prop_col_idx, r_idx), (prop_col_idx, r_idx), colors.HexColor("#F3F4F6")))

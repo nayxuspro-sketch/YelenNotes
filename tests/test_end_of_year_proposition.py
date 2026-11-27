@@ -217,6 +217,8 @@ def test_end_of_year_proposition_rules_history_incomplete_and_exports(app, clien
     html = page.data.decode("utf-8")
     assert "PROPOSITION DE FIN D'ANNÉE" in html
     assert "Non déterminé" in html
+    official_table = html.split('<table class="table table-bordered table-sm align-middle mb-3">', 1)[1].split("</table>", 1)[0]
+    assert "Redouble" not in official_table
 
     pdf_resp = client.get(f"/resultats/proposition-fin-annee/pdf?class_id={cm2_id}")
     assert pdf_resp.status_code == 200
@@ -244,6 +246,7 @@ def test_end_of_year_proposition_rules_history_incomplete_and_exports(app, clien
     assert actual_headers == expected_headers
     assert ws.cell(row=5, column=1).value == 1
     assert ws.cell(row=5, column=12).value == "Passe"
+    assert ws.cell(row=7, column=12).value in (None, "")
     assert ws.cell(row=8, column=12).value == "Non déterminé"
 
     # Validation modifiable par la direction (ex. repêchage par le conseil des maîtres) + trace conservée
