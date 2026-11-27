@@ -1,5 +1,3 @@
 @echo off
-cd /d "%~dp0"
-echo Demarrage de Yelen Notes en mode MULTIPOSTE sur le reseau local...
-YelenNotes.exe --mode multiposte
-pause
+start "" /d "%~dp0" "%~dp0YelenNotes.exe" --mode multiposte
+exit /b 0

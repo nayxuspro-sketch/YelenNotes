@@ -1,5 +1,3 @@
 @echo off
-cd /d "%~dp0"
-echo Demarrage de Yelen Notes sur la BASE DE DEMONSTRATION FICTIVE separee...
-YelenNotes.exe --mode monoposte --demo
-pause
+start "" /d "%~dp0" "%~dp0YelenNotes.exe" --mode monoposte --demo
+exit /b 0

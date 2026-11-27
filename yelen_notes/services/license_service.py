@@ -896,6 +896,10 @@ def build_client_school_kit_zip(paths: RuntimePaths, app_version: str) -> bytes:
         "README.md",
         "requirements.txt",
         "requirements-build.txt",
+        "1_Lancer_Yelen_Notes.vbs",
+        "Lancer_Multiposte_Reseau.vbs",
+        "Lancer_Demonstration.vbs",
+        "Arreter_Yelen_Notes.vbs",
         "1_Installer_et_Lancer_Directement.bat",
         "2_Compiler_Dossier_Portable_EXE.bat",
     ]
@@ -934,7 +938,8 @@ def build_client_school_kit_zip(paths: RuntimePaths, app_version: str) -> bytes:
             "Cette version est protégée par licence matérielle individuelle.\r\n"
             "Toute copie de ce dossier vers un autre ordinateur sera automatiquement bloquée.\r\n\r\n"
             "PROCÉDURE D'ACTIVATION :\r\n"
-            "1. Lancez « 1_Installer_et_Lancer_Directement.bat » sur l'ordinateur de l'école.\r\n"
+            "1. Double-cliquez sur « 1_Lancer_Yelen_Notes.vbs » (aucune fenêtre console :\r\n"
+            "   l'application démarre silencieusement en arrière-plan et ouvre le navigateur).\r\n"
             "2. Sur l'écran d'activation qui s'ouvre dans le navigateur, relevez le\r\n"
             "   Code d'Empreinte Matérielle Unique (format : YNM-XXXX-XXXX-XXXX-XXXX-XXXX)\r\n"
             "   ou téléchargez la fiche de demande d'activation (.req).\r\n"

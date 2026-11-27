@@ -487,10 +487,18 @@ def test_super_admin_deployment_edition_and_client_school_kit_export(app, tmp_pa
 
     zf = zipfile.ZipFile(io.BytesIO(r_zip.data))
     names = zf.namelist()
-    # La clé publique de vérification et le guide d'activation sont inclus
+    # La clé publique de vérification, les lanceurs silencieux .vbs et le guide d'activation sont inclus
     assert any(n.endswith(f"config/{PUBLISHER_PUB_FILENAME}") for n in names)
     assert any(n.endswith("LISEZ_MOI_ACTIVATION_LICENCE.txt") for n in names)
+    assert any(n.endswith("1_Lancer_Yelen_Notes.vbs") for n in names)
+    assert any(n.endswith("Lancer_Multiposte_Reseau.vbs") for n in names)
+    assert any(n.endswith("Arreter_Yelen_Notes.vbs") for n in names)
     assert any(n.endswith("run.py") for n in names)
+
+    spec_txt = (app.config["RUNTIME_PATHS"].program_root / "packaging" / "yelen_notes.spec").read_text(
+        encoding="utf-8"
+    )
+    assert "console=False" in spec_txt
 
     # La clé privée de déploiement Super Admin et les scripts éditeur sont strictement absents !
     assert not any(DEPLOYMENT_KEY_FILENAME in n for n in names)
