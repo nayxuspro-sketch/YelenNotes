@@ -1,7 +1,10 @@
 ================================================================================
-YELEN NOTES — Application locale de gestion et de calcul des notes scolaires
-Écoles primaires du Burkina Faso — Version 1.0.0
+OVICLOUD NOTES — Application locale de gestion et de calcul des notes scolaires
+Écoles primaires du Burkina Faso — Version 1.5.0
 ================================================================================
+Nom commercial mis à jour vers OviCloud Notes. Les noms techniques historiques YelenNotes.exe,
+YELEN-NOTES et les chemins de données sont conservés pour protéger les licences et installations existantes.
+
 
 FONCTIONNEMENT HORS LIGNE (WINDOWS 10 / WINDOWS 11 — 64 BITS)
 Aucune connexion Internet ni installation de Python n'est requise.

@@ -1,5 +1,5 @@
 ' ============================================================================
-' YELEN NOTES — Lancement silencieux sans console (Multiposte Reseau LAN)
+' OVICLOUD NOTES — Lancement silencieux sans console (Multiposte Reseau LAN)
 ' ============================================================================
 Option Explicit
 

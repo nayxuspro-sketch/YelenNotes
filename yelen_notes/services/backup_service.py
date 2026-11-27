@@ -16,7 +16,7 @@ from yelen_notes.extensions import db
 from yelen_notes.models import BackupRecord, EstablishmentSettings, utcnow_naive
 from yelen_notes.paths import RuntimePaths
 from yelen_notes.security import record_audit_log
-from yelen_notes.version import SCHEMA_VERSION
+from yelen_notes.version import APP_NAME, SCHEMA_VERSION
 
 
 class BackupError(RuntimeError):
@@ -113,7 +113,7 @@ def create_safe_backup(
 
         db_sha256 = _compute_sha256(snapshot_db)
         manifest = {
-            "application": "Yelen Notes",
+            "application": APP_NAME,
             "app_version": app_version,
             "schema_version": SCHEMA_VERSION,
             "trigger_type": trigger_type,

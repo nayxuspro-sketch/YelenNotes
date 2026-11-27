@@ -1,4 +1,4 @@
-"""Moteur mathématique et pédagogique de Yelen Notes (§5, §6, §8.3, §9, §10, §11, §12 CdC).
+"""Moteur mathématique et pédagogique de OviCloud Notes (§5, §6, §8.3, §9, §10, §11, §12 CdC).
 
 Toutes les opérations utilisent `decimal.Decimal` afin d'éviter toute dérive d'arrondi binaire.
 """

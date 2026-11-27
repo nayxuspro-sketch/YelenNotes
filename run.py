@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Point d'entrée principal de Yelen Notes (Waitress HTTP silencieux en arrière-plan + utilitaires).
+"""Point d'entrée principal de OviCloud Notes (Waitress HTTP silencieux en arrière-plan + utilitaires).
 
 Modes d'utilisation (Architecture technique §3 et §6) :
 - Monoposte silencieux : pythonw run.py                 -> http://127.0.0.1:5000
@@ -55,7 +55,7 @@ from yelen_notes.services.license_service import (
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="YelenNotes",
-        description="Yelen Notes — Application locale de gestion et de calcul des notes scolaires",
+        description="OviCloud Notes — Application locale de gestion et de calcul des notes scolaires",
     )
     parser.add_argument(
         "--mode",
@@ -94,7 +94,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--stop",
         action="store_true",
-        help="Arrête proprement l'instance Yelen Notes en cours d'exécution en arrière-plan.",
+        help="Arrête proprement l'instance OviCloud Notes en cours d'exécution en arrière-plan.",
     )
     parser.add_argument(
         "--reset-admin",
@@ -154,7 +154,7 @@ def _detach_windows_console_if_present(paths: RuntimePaths) -> None:
 
 
 def _probe_existing_yelen_server(port: int) -> dict | None:
-    """Vérifie si une instance Yelen Notes répond déjà sur `127.0.0.1:port`."""
+    """Vérifie si une instance OviCloud Notes répond déjà sur `127.0.0.1:port`."""
     url = f"http://127.0.0.1:{port}/etat-sante"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
@@ -184,7 +184,7 @@ def _terminate_windows_server(pid: int) -> None:
 
 
 def _stop_running_instance(paths: RuntimePaths, port: int) -> bool:
-    """Arrête proprement le processus serveur Yelen Notes enregistré pour `port`."""
+    """Arrête proprement le processus serveur OviCloud Notes enregistré pour `port`."""
     pid_file = _pid_file_for_port(paths, port)
     stopped = False
     if pid_file.is_file():
@@ -253,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     if os.name == "nt" and not is_cli_utility and not args.console:
         _detach_windows_console_if_present(paths)
 
-    # Si Yelen Notes tourne déjà en arrière-plan sur ce port :
+    # Si OviCloud Notes tourne déjà en arrière-plan sur ce port :
     # - même mode & même base -> ouvrir simplement le navigateur sans relancer un second serveur
     # - mode différent (ex. passage Monoposte -> Multiposte ou Démo) -> arrêter l'ancien puis relancer
     if not is_cli_utility:
@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     lic_startup = evaluate_runtime_license(paths, server_mode=mode)
     local_url = f"http://127.0.0.1:{port}"
     print("=" * 72)
-    print(f"  YELEN NOTES v{app.config['APP_VERSION']} — Démarrage du serveur local")
+    print(f"  OVICLOUD NOTES v{app.config['APP_VERSION']} — Démarrage du serveur local")
     print("=" * 72)
     print(f"  Mode actif          : {mode.upper()}" + (" [BASE DE DÉMONSTRATION FICTIVE]" if is_demo else ""))
     print(f"  Empreinte ce poste  : {lic_startup.current_machine_fingerprint}")
@@ -369,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     def _graceful_shutdown(_signum, _frame):
         nonlocal shutting_down
         shutting_down = True
-        print("\nArrêt propre du serveur Yelen Notes en cours...", flush=True)
+        print("\nArrêt propre du serveur OviCloud Notes en cours...", flush=True)
         server.close()
 
     signal.signal(signal.SIGINT, _graceful_shutdown)

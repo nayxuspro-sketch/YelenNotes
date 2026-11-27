@@ -111,7 +111,7 @@ def bootstrap_admin():
         session.permanent = True
         session["last_activity_ts"] = int(utcnow_naive().timestamp())
         flash(
-            "Compte administrateur créé avec succès. Bienvenue dans Yelen Notes ! "
+            "Compte administrateur créé avec succès. Bienvenue dans OviCloud Notes ! "
             "Suivez le guide de configuration ci-dessous pour paramétrer votre école.",
             "success",
         )

@@ -265,5 +265,5 @@ def test_update_routes_are_exclusive_to_super_admin(app, configured_school):
     ).status_code == 200
     response = client.get("/administration/mises-a-jour")
     assert response.status_code == 200
-    assert "Mise à jour de Yelen Notes" in response.data.decode("utf-8")
+    assert "Mise à jour de OviCloud Notes" in response.data.decode("utf-8")
     assert "Mises à jour en ligne" in response.data.decode("utf-8")

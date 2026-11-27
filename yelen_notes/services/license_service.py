@@ -933,7 +933,7 @@ def build_client_school_kit_zip(paths: RuntimePaths, app_version: str) -> bytes:
 
         activation_guide = (
             "========================================================================\r\n"
-            f"  YELEN NOTES v{app_version} — GUIDE D'ACTIVATION POSTE CLIENT ÉCOLE\r\n"
+            f"  OVICLOUD NOTES v{app_version} — GUIDE D'ACTIVATION POSTE CLIENT ÉCOLE\r\n"
             "========================================================================\r\n\r\n"
             "Cette version est protégée par licence matérielle individuelle.\r\n"
             "Toute copie de ce dossier vers un autre ordinateur sera automatiquement bloquée.\r\n\r\n"
@@ -943,7 +943,7 @@ def build_client_school_kit_zip(paths: RuntimePaths, app_version: str) -> bytes:
             "2. Sur l'écran d'activation qui s'ouvre dans le navigateur, relevez le\r\n"
             "   Code d'Empreinte Matérielle Unique (format : YNM-XXXX-XXXX-XXXX-XXXX-XXXX)\r\n"
             "   ou téléchargez la fiche de demande d'activation (.req).\r\n"
-            "3. Transmettez cette empreinte au Super Administrateur Yelen Notes afin de\r\n"
+            "3. Transmettez cette empreinte au Super Administrateur OviCloud Notes afin de\r\n"
             "   recevoir votre licence signée (Monoposte ou Multiposte Réseau).\r\n"
             "4. Importez le fichier .ylic reçu (ou collez la clé YNL1-...) pour déverrouiller\r\n"
             "   définitivement l'application sur cet ordinateur.\r\n"

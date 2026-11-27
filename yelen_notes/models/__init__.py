@@ -1,4 +1,4 @@
-"""Export centralisé des modèles de données Yelen Notes."""
+"""Export centralisé des modèles de données OviCloud Notes."""
 
 from yelen_notes.models.entities import (
     ABSENCE_NEUTRALIZE,

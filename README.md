@@ -1,6 +1,8 @@
-# Yelen Notes
+# OviCloud Notes
 
 **Application web locale, hors ligne et portable de gestion et de calcul des notes scolaires pour les écoles primaires du Burkina Faso.**
+
+Le nom commercial est désormais **OviCloud Notes**. Les chemins, identifiants de licence, dépôt technique et noms de fichiers historiques `YelenNotes.exe` / `YELEN-NOTES` restent inchangés pour préserver la compatibilité des installations existantes.
 
 Conçue conformément au [Cahier des charges](docs/references/Cahier_des_charges_Yelen_Notes.md), à l'[Architecture technique](docs/references/Architecture_technique_Yelen_Notes.md) et au [Dossier de conception validé](docs/conception/01_modele_donnees_calculs_securite_maquettes.md).
 
@@ -26,7 +28,7 @@ YelenNotes/
 ├── run.py                          # Point d'entrée Waitress & utilitaires CLI
 ├── requirements.txt                # Dépendances Python avec versions figées
 ├── requirements-build.txt          # Dépendances incluant PyInstaller pour compilation Windows
-├── VERSION.txt                     # Version applicative (1.0.0)
+├── VERSION.txt                     # Version applicative
 ├── README.txt                      # Lisez-moi destiné au dossier portable Windows
 ├── config/
 │   └── yelen_notes.example.ini     # Modèle de configuration monoposte/multiposte/stockage
@@ -74,7 +76,7 @@ python3 -m venv .venv
 
 Deux lanceurs automatiques sont fournis directement à la racine du dossier (ils détectent ou installent automatiquement Python 64 bits, créent l'environnement virtuel et installent toutes les bibliothèques manquantes) :
 
-- **`1_Installer_et_Lancer_Directement.bat`** : installe automatiquement tout ce qui manque et ouvre immédiatement Yelen Notes dans votre navigateur.
+- **`1_Installer_et_Lancer_Directement.bat`** : installe automatiquement tout ce qui manque et ouvre immédiatement OviCloud Notes dans votre navigateur.
 - **`2_Compiler_Dossier_Portable_EXE.bat`** *(ou `packaging\build_windows_portable.bat`)* : installe automatiquement tout ce qui manque et produit le dossier autonome **`dist\YELEN-NOTES\`** (`YelenNotes.exe`) prêt à être copié-collé sur clé USB pour n'importe quel PC d'école sans Python ni connexion Internet.
 
 ---

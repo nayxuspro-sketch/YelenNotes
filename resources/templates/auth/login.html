@@ -5,8 +5,8 @@
 {% block guest_content %}
 <div class="yn-auth-card">
     <div class="p-4 pb-3 border-bottom text-center">
-        <div class="yn-brand-badge mx-auto mb-3" style="width: 42px; height: 42px; font-size: 1rem;">YN</div>
-        <h1 class="h5 fw-bold mb-1">Yelen Notes</h1>
+        <img src="{{ url_for('static', filename='images/ovicloud-logo.png') }}" alt="OviCloud Notes — Cultiver le vivant, connecter l’avenir" class="ovicloud-auth-logo mb-2">
+        <h1 class="h5 fw-bold mb-1">{{ app_name }}</h1>
         <div class="text-muted small">Plateforme de gestion scolaire et académique</div>
     </div>
     <div class="p-4">

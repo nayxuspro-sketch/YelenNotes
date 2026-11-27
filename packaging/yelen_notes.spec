@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Spécification PyInstaller ONEDIR pour Yelen Notes (Windows 10/11 64 bits — Python 3.12).
+"""Spécification PyInstaller ONEDIR pour OviCloud Notes (Windows 10/11 64 bits — Python 3.12).
 
 Produit un dossier portable autonome `dist/YELEN-NOTES/` contenant :
 - YelenNotes.exe
@@ -63,6 +63,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="YelenNotes",
+    icon=str(ROOT_DIR / "resources" / "static" / "images" / "ovicloud.ico"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
