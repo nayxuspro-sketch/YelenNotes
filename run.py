@@ -172,6 +172,17 @@ def _pid_file_for_port(paths: RuntimePaths, port: int) -> Path:
     return paths.data_dir / f"yelen_server_{port}.pid"
 
 
+def _terminate_windows_server(pid: int) -> None:
+    """Arrête uniquement le processus serveur, sans tuer l'assistant de redémarrage qui l'a lancé."""
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/F"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+        check=False,
+    )
+
+
 def _stop_running_instance(paths: RuntimePaths, port: int) -> bool:
     """Arrête proprement le processus serveur Yelen Notes enregistré pour `port`."""
     pid_file = _pid_file_for_port(paths, port)
@@ -181,13 +192,9 @@ def _stop_running_instance(paths: RuntimePaths, port: int) -> bool:
             pid = int(pid_file.read_text(encoding="utf-8").strip())
             if pid > 0 and pid != os.getpid():
                 if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/PID", str(pid), "/T", "/F"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
-                        check=False,
-                    )
+                    # Ne pas utiliser taskkill /T : l'assistant qui orchestre le redémarrage
+                    # est un enfant temporaire de ce serveur et serait tué avec lui.
+                    _terminate_windows_server(pid)
                 else:
                     os.kill(pid, signal.SIGTERM)
                 stopped = True

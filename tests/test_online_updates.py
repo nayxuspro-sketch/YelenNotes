@@ -12,6 +12,7 @@ import zipfile
 import pytest
 
 from tests.conftest import extract_csrf_token
+import run as yelen_entrypoint
 from yelen_notes.extensions import db
 from yelen_notes.models import ROLE_ADMIN_ETAB, ROLE_SUPER_ADMIN, User
 from yelen_notes.security import ensure_user_role_synced
@@ -89,6 +90,17 @@ def _isolated_paths(app, tmp_path, *, deployment: bool):
         logs_dir=data_dir / "logs",
     )
     return paths
+
+
+def test_windows_restart_stop_does_not_kill_its_helper(monkeypatch):
+    calls = []
+    monkeypatch.setattr(yelen_entrypoint.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+
+    yelen_entrypoint._terminate_windows_server(4321)
+
+    assert calls[0][0] == ["taskkill", "/PID", "4321", "/F"]
+    assert "/T" not in calls[0][0]
+    assert calls[0][1]["check"] is False
 
 
 def test_online_release_check_semver_and_network_failure(app, tmp_path):
