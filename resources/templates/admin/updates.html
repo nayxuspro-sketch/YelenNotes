@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import icon %}
+{% block title %}Mises à jour en ligne{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="yn-page-title mb-1">Mise à jour de Yelen Notes</h1>
+        <p class="text-muted small mb-0">Vérifiez la dernière version officielle ou importez un paquet depuis un ordinateur connecté.</p>
+    </div>
+    <span class="badge text-bg-primary px-3 py-2">Version installée : v{{ current_version }}</span>
+</div>
+
+{% if is_frozen %}
+<div class="alert alert-warning" role="alert">
+    <strong>Installation compilée détectée.</strong> Cette édition ne peut pas remplacer son exécutable depuis l'interface.
+    Utilisez le kit Client École ou le paquet de déploiement correspondant à la nouvelle version, puis suivez sa procédure d'installation.
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <section class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">{{ icon('refresh-cw', 16) }} Vérifier sur GitHub</div>
+            <div class="card-body">
+                <p class="small text-muted">La vérification contacte le dépôt officiel <code>nayxuspro-sketch/YelenNotes</code>. Aucune donnée scolaire n'est envoyée.</p>
+                <a class="btn btn-outline-primary" href="{{ url_for('admin.updates_manage', verifier=1) }}">
+                    {{ icon('search', 14) }} Vérifier les mises à jour
+                </a>
+
+                {% if update_result %}
+                    {% if update_result.reachable %}
+                        {% if update_result.update_available %}
+                        <div class="alert alert-success mt-3 mb-0">
+                            <h2 class="h6 mb-1">{{ update_result.release_title }} — v{{ update_result.latest_version }}</h2>
+                            <p class="small mb-2">{% if update_result.published_at %}Publication : {{ update_result.published_at }}{% endif %}</p>
+                            <details class="small mb-3">
+                                <summary>Notes de version</summary>
+                                <pre class="mt-2 mb-0 text-wrap">{{ update_result.release_notes }}</pre>
+                            </details>
+                            {% if not is_frozen %}
+                            <form method="post" action="{{ url_for('admin.apply_online_update_route') }}" onsubmit="return confirm('Installer v{{ update_result.latest_version }} maintenant ? Le serveur redémarrera après la sauvegarde.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-success">{{ icon('download', 14) }} Télécharger et installer v{{ update_result.latest_version }}</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info mt-3 mb-0">Yelen Notes v{{ current_version }} est à jour. Vérification : {{ update_result.checked_at }}.</div>
+                        {% endif %}
+                    {% else %}
+                    <div class="alert alert-warning mt-3 mb-0">{{ update_result.error_message }}</div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <div class="col-lg-6">
+        <section class="card h-100">
+            <div class="card-header d-flex align-items-center gap-2">{{ icon('file-up', 16) }} Installer un paquet hors ligne</div>
+            <div class="card-body">
+                <p class="small text-muted">Téléchargez l'archive ZIP officielle sur un poste connecté, transférez-la ici (clé USB), puis importez-la. Limite : 64 Mo.</p>
+                <form method="post" action="{{ url_for('admin.apply_offline_update_route') }}" enctype="multipart/form-data" onsubmit="return confirm('Importer et appliquer cette mise à jour ? Une sauvegarde vérifiée sera créée avant toute modification.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label" for="update_zip">Archive de mise à jour (.zip)</label>
+                        <input class="form-control" type="file" id="update_zip" name="update_zip" accept=".zip,application/zip" required>
+                    </div>
+                    {% if not is_frozen %}
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="force_reinstall" name="force_reinstall">
+                        <label class="form-check-label small" for="force_reinstall">Réinstaller la même version (pas de retour à une version antérieure)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">{{ icon('upload', 14) }} Vérifier et installer le ZIP</button>
+                    {% else %}
+                    <div class="text-muted small">L'import automatique est désactivé pour l'édition compilée. Suivez la procédure du kit.</div>
+                    {% endif %}
+                </form>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="alert alert-secondary small" role="note">
+    <strong>Protection des données :</strong> avant l'installation, Yelen Notes crée une sauvegarde SQLite à chaud et vérifie son intégrité.
+    La base scolaire, les documents, les paramètres locaux et la licence sont conservés. Le module refuse les archives incomplètes,
+    corrompues, trop volumineuses, les chemins dangereux et tout retour à une version antérieure.
+    Une archive hors ligne doit contenir <code>VERSION.txt</code>, <code>run.py</code> et les composants officiels requis.
+    Son origine n'étant pas authentifiée par une signature, n'importez qu'un ZIP téléchargé depuis le dépôt GitHub officiel.
+</div>
+
+<section class="card">
+    <div class="card-header">Historique des mises à jour</div>
+    <div class="card-body p-0">
+        {% if update_history %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead><tr><th>Date</th><th>Version précédente</th><th>Version installée</th><th>Source</th><th>Sauvegarde préalable</th></tr></thead>
+                <tbody>
+                {% for item in update_history %}
+                    <tr>
+                        <td>{{ item.applied_at or '—' }}</td>
+                        <td>v{{ item.previous_version or '—' }}</td>
+                        <td><strong>v{{ item.new_version or '—' }}</strong></td>
+                        <td>{{ item.source_label or '—' }}</td>
+                        <td><code>{{ item.backup_filename or '—' }}</code></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted small p-3 mb-0">Aucune mise à jour n'a encore été appliquée depuis ce module.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
