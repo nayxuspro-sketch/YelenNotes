@@ -149,8 +149,8 @@
                     {% endfor %}
                     <td class="text-center fw-bold bg-light yn-tabular">{{ row.display_annual_average_2dec }}</td>
                     <td class="text-center fw-bold bg-light">{{ row.display_rank }}</td>
-                    <td class="text-center {% if row.auto_proposition == 'Passe' %}yn-prop-pass{% elif row.auto_proposition == 'Redouble' %}yn-prop-fail{% else %}yn-prop-undetermined{% endif %}">
-                        {{ row.auto_proposition }}
+                    <td class="text-center {% if row.auto_proposition == 'Passe' %}yn-prop-pass{% elif row.auto_proposition != 'Redouble' %}yn-prop-undetermined{% endif %}">
+                        {% if row.auto_proposition != 'Redouble' %}{{ row.auto_proposition }}{% endif %}
                     </td>
                 </tr>
                 {% else %}

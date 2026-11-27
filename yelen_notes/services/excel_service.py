@@ -684,9 +684,7 @@ def export_end_of_year_proposition_to_excel(
         c.border = CELL_BORDER
 
     pass_fill = PatternFill(start_color="ECFDF5", end_color="ECFDF5", fill_type="solid")
-    fail_fill = PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid")
     pass_font = Font(name="Calibri", size=10, bold=True, color="065F46")
-    fail_font = Font(name="Calibri", size=10, bold=True, color="991B1B")
 
     for row in proposition.rows:
         vals = [
@@ -698,7 +696,8 @@ def export_end_of_year_proposition_to_excel(
             row.repeated_current_class,
         ]
         vals.extend(row.slot_displays)
-        vals.extend([row.display_annual_average_2dec, row.display_rank, row.auto_proposition])
+        display_proposition = "" if row.auto_proposition == PROPOSITION_REDOUBLE else row.auto_proposition
+        vals.extend([row.display_annual_average_2dec, row.display_rank, display_proposition])
         ws.append(vals)
         r = ws.max_row
         for c_idx in range(1, total_cols + 1):
@@ -711,9 +710,6 @@ def export_end_of_year_proposition_to_excel(
         if row.auto_proposition == PROPOSITION_PASSE:
             prop_cell.fill = pass_fill
             prop_cell.font = pass_font
-        elif row.auto_proposition == PROPOSITION_REDOUBLE:
-            prop_cell.fill = fail_fill
-            prop_cell.font = fail_font
 
     _auto_fit_columns(ws)
     buf = io.BytesIO()
