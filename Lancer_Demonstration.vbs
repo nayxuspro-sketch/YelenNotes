@@ -1,5 +1,5 @@
 ' ============================================================================
-' YELEN NOTES — Lancement silencieux sans console (Base de Demonstration)
+' OVICLOUD NOTES — Lancement silencieux sans console (Base de Demonstration)
 ' ============================================================================
 Option Explicit
 

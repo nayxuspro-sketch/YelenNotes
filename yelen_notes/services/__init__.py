@@ -1,1 +1,1 @@
-"""Couche de services métier de Yelen Notes."""
+"""Couche de services métier de OviCloud Notes."""

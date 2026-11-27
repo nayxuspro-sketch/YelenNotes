@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM YELEN NOTES — Compilation automatique Windows 10/11 64 bits (PyInstaller ONEDIR)
+REM OVICLOUD NOTES — Compilation automatique Windows 10/11 64 bits (PyInstaller ONEDIR)
 REM Installe automatiquement Python 64 bits et toutes les dependances manquantes,
 REM puis genere le dossier portable autonome : dist\YELEN-NOTES\
 REM ============================================================================

@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM Autorise le port TCP 5000 de Yelen Notes UNIQUEMENT sur le profil reseau Prive
+REM Autorise le port TCP 5000 de OviCloud Notes UNIQUEMENT sur le profil reseau Prive
 REM (Doit etre execute une seule fois en tant qu'Administrateur Windows sur le serveur)
 REM ============================================================================
 netsh advfirewall firewall delete rule name="Yelen Notes (Reseau Local Prive)" >nul 2>&1

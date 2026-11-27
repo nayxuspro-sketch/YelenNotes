@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM YELEN NOTES — Version de deploiement Super Admin
+REM OVICLOUD NOTES — Version de deploiement Super Admin
 REM Exporte une archive ZIP Version Client Ecole (sans cle privee de signature)
 REM ============================================================================
 setlocal

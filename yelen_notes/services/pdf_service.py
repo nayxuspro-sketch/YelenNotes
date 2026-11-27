@@ -31,6 +31,7 @@ from reportlab.platypus import (
 
 from yelen_notes.models import ANNUAL_WEIGHTED, EstablishmentSettings
 from yelen_notes.paths import RuntimePaths
+from yelen_notes.version import APP_NAME
 from yelen_notes.services.calculation_service import (
     PROPOSITION_NON_DETERMINE,
     PROPOSITION_PASSE,
@@ -273,7 +274,7 @@ def _footer_canvas_callback(canvas, doc):
     canvas.setFont(FONT_REGULAR if _FONTS_REGISTERED else "Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#4B5563"))
     w, _ = doc.pagesize
-    canvas.drawString(12 * mm, 8 * mm, f"Yelen Notes — Édition du {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    canvas.drawString(12 * mm, 8 * mm, f"{APP_NAME} — Édition du {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     canvas.drawRightString(w - 12 * mm, 8 * mm, f"Page {doc.page}")
     canvas.restoreState()
 

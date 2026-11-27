@@ -1,4 +1,4 @@
-"""Fabrique d'application Flask (Application Factory) de Yelen Notes."""
+"""Fabrique d'application Flask (Application Factory) de OviCloud Notes."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def create_app(
     config_overrides: dict[str, Any] | None = None,
     auto_init_db: bool = True,
 ) -> Flask:
-    """Crée et configure une instance complète de l'application Flask Yelen Notes."""
+    """Crée et configure une instance complète de l'application Flask OviCloud Notes."""
     paths = runtime_paths or build_runtime_paths()
     cfg = build_flask_config(paths, server_mode=server_mode, overrides=config_overrides)
     cfg.setdefault("WTF_CSRF_SSL_STRICT", False)

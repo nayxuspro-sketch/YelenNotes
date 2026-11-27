@@ -1,5 +1,5 @@
 ' ============================================================================
-' YELEN NOTES — Arret propre du serveur silencieux en arriere-plan
+' OVICLOUD NOTES — Arret propre du serveur silencieux en arriere-plan
 ' ============================================================================
 Option Explicit
 

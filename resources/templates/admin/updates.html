@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
     <div>
-        <h1 class="yn-page-title mb-1">Mise à jour de Yelen Notes</h1>
+        <h1 class="yn-page-title mb-1">Mise à jour de {{ app_name }}</h1>
         <p class="text-muted small mb-0">Vérifiez la dernière version officielle ou importez un paquet depuis un ordinateur connecté.</p>
     </div>
     <span class="badge text-bg-primary px-3 py-2">Version installée : v{{ current_version }}</span>
@@ -46,7 +46,7 @@
                             {% endif %}
                         </div>
                         {% else %}
-                        <div class="alert alert-info mt-3 mb-0">Yelen Notes v{{ current_version }} est à jour. Vérification : {{ update_result.checked_at }}.</div>
+                        <div class="alert alert-info mt-3 mb-0">{{ app_name }} v{{ current_version }} est à jour. Vérification : {{ update_result.checked_at }}.</div>
                         {% endif %}
                     {% else %}
                     <div class="alert alert-warning mt-3 mb-0">{{ update_result.error_message }}</div>
@@ -83,7 +83,7 @@
 </div>
 
 <div class="alert alert-secondary small" role="note">
-    <strong>Protection des données :</strong> avant l'installation, Yelen Notes crée une sauvegarde SQLite à chaud et vérifie son intégrité.
+    <strong>Protection des données :</strong> avant l'installation, {{ app_name }} crée une sauvegarde SQLite à chaud et vérifie son intégrité.
     La base scolaire, les documents, les paramètres locaux et la licence sont conservés. Le module refuse les archives incomplètes,
     corrompues, trop volumineuses, les chemins dangereux et tout retour à une version antérieure.
     Une archive hors ligne doit contenir <code>VERSION.txt</code>, <code>run.py</code> et les composants officiels requis.

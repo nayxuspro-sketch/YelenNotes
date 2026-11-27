@@ -1,8 +1,8 @@
-"""Informations de version de Yelen Notes."""
+"""Informations de version de OviCloud Notes."""
 
 from pathlib import Path
 
-APP_NAME = "Yelen Notes"
+APP_NAME = "OviCloud Notes"
 SCHEMA_VERSION = "1.1.0"
 
 

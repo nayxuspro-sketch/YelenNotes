@@ -1,4 +1,4 @@
-"""Modèles relationnels SQLAlchemy de Yelen Notes (15 tables conformes au dossier validé)."""
+"""Modèles relationnels SQLAlchemy de OviCloud Notes (15 tables conformes au dossier validé)."""
 
 from __future__ import annotations
 

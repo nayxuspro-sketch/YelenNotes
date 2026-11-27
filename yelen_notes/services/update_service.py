@@ -1,4 +1,4 @@
-"""Module de mise à jour en ligne et par archive locale sécurisée de Yelen Notes.
+"""Module de mise à jour en ligne et par archive locale sécurisée de OviCloud Notes.
 
 Garanties fondamentales :
 1. Sauvegarde SQLite à chaud vérifiée obligatoire (`PRE_UPDATE`) avant toute modification de fichiers.
@@ -154,7 +154,7 @@ def check_online_update(
             current_version=normalize_version_string(current_version),
             latest_version=latest_ver,
             download_tag=tag_name,
-            release_title=str(data.get("name") or f"Yelen Notes {tag_name}").strip(),
+            release_title=str(data.get("name") or f"OviCloud Notes {tag_name}").strip(),
             release_notes=str(data.get("body") or "Aucune note de version détaillée.").strip(),
             published_at=pub_fmt,
             repository=repo,
@@ -286,7 +286,7 @@ def inspect_and_validate_update_zip(zip_bytes: bytes) -> tuple[str, str]:
         for req in required_rel:
             if f"{prefix}{req}" not in normalized_set:
                 raise UpdateError(
-                    f"Cette archive n'est pas un paquet officiel complet Yelen Notes ({req} manquant)."
+                    f"Cette archive n'est pas un paquet officiel complet OviCloud Notes ({req} manquant)."
                 )
 
         new_ver = normalize_version_string(zf.read(version_entry).decode("utf-8", errors="replace"))

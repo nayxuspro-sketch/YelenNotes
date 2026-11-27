@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Installation, reparation et lancement/compilation 100 % automatiques de Yelen Notes (Windows 10/11 64 bits).
+    Installation, reparation et lancement/compilation 100 % automatiques de OviCloud Notes (Windows 10/11 64 bits).
 .DESCRIPTION
     Compatible Windows PowerShell 5.1 et PowerShell 7+.
     N'utilise aucun retour pipeline sur les commandes externes afin d'afficher les barres de
@@ -295,14 +295,14 @@ try {
 
         if (-not $NoPause) {
             Write-Host ""
-            $ans = Read-Host "Voulez-vous lancer YelenNotes.exe tout de suite ? (O/N)"
+            $ans = Read-Host "Voulez-vous lancer OviCloud Notes (YelenNotes.exe) tout de suite ? (O/N)"
             if ($ans -match "^[OoYy]") {
                 Start-Process -FilePath $BuiltExe -WorkingDirectory $DistTarget
             }
         }
     }
     else {
-        Write-Step "[4/4] Lancement silencieux de Yelen Notes en arriere-plan (mode $Mode)..."
+        Write-Step "[4/4] Lancement silencieux de OviCloud Notes en arriere-plan (mode $Mode)..."
         $VenvPythonW = Join-Path $VenvDir "Scripts\pythonw.exe"
         $LaunchExe = if (Test-Path -LiteralPath $VenvPythonW) { $VenvPythonW } else { $VenvPython }
         $RunArgs = @((Join-Path $RootDir "run.py"), "--mode", $Mode)

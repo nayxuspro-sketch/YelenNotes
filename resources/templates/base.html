@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Yelen Notes{% endblock %} — Gestion scolaire</title>
+    <title>{% block title %}Gestion scolaire{% endblock %} — {{ app_name }}</title>
     <script>
         (function () {
             try {
@@ -17,6 +17,7 @@
             } catch (e) {}
         })();
     </script>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/ovicloud-mark.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
@@ -47,9 +48,9 @@
         <aside class="yn-sidebar no-print" aria-label="Navigation principale">
             <div class="yn-sidebar-header">
                 <a href="{{ url_for('operations.parent_portal') if is_parent_only else url_for('dashboard.index') }}" class="yn-brand-link">
-                    <span class="yn-brand-badge">YN</span>
+                    <span class="yn-brand-badge">OC</span>
                     <div class="yn-brand-meta">
-                        <div class="yn-brand-title">Yelen Notes</div>
+                        <div class="yn-brand-title">{{ app_name }}</div>
                         <div class="yn-brand-sub">v{{ app_version }} · {{ 'Multiposte LAN' if server_mode == 'multiposte' else 'Poste local' }}</div>
                     </div>
                 </a>

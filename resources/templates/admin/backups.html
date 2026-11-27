@@ -162,7 +162,7 @@
     <div class="card-body">
         <div class="alert alert-warning small">
             <strong>Attention :</strong> la restauration remplace les données actuelles par celles de l'archive choisie.
-            Par mesure de sécurité, Yelen Notes vérifie d'abord l'intégrité de l'archive, crée automatiquement une sauvegarde
+            Par mesure de sécurité, {{ app_name }} vérifie d'abord l'intégrité de l'archive, crée automatiquement une sauvegarde
             <code>PRE_RESTORE</code> de la base actuelle, puis contrôle l'intégrité après restauration.
         </div>
         <form method="post" action="{{ url_for('admin.restore_backup') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
