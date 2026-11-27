@@ -1,4 +1,3 @@
 @echo off
-cd /d "%~dp0"
-YelenNotes.exe --mode monoposte
-pause
+start "" /d "%~dp0" "%~dp0YelenNotes.exe" --mode monoposte
+exit /b 0

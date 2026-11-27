@@ -273,6 +273,10 @@ try {
         Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Monoposte.bat") -Destination (Join-Path $DistTarget "Lancer_Monoposte.bat") -Force
         Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Multiposte_Reseau.bat") -Destination (Join-Path $DistTarget "Lancer_Multiposte_Reseau.bat") -Force
         Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Demonstration.bat") -Destination (Join-Path $DistTarget "Lancer_Demonstration.bat") -Force
+        Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Monoposte.vbs") -Destination (Join-Path $DistTarget "Lancer_Monoposte.vbs") -Force
+        Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Multiposte_Reseau.vbs") -Destination (Join-Path $DistTarget "Lancer_Multiposte_Reseau.vbs") -Force
+        Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Lancer_Demonstration.vbs") -Destination (Join-Path $DistTarget "Lancer_Demonstration.vbs") -Force
+        Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Arreter_Yelen_Notes.vbs") -Destination (Join-Path $DistTarget "Arreter_Yelen_Notes.vbs") -Force
         Copy-Item -LiteralPath (Join-Path $RootDir "packaging\Autoriser_PareFeu_Reseau_Prive.bat") -Destination (Join-Path $DistTarget "Autoriser_PareFeu_Reseau_Prive.bat") -Force
 
         $BuiltExe = Join-Path $DistTarget "YelenNotes.exe"
@@ -298,15 +302,14 @@ try {
         }
     }
     else {
-        Write-Step "[4/4] Lancement de Yelen Notes (mode $Mode)..."
-        $RunArgs = @("-u", (Join-Path $RootDir "run.py"), "--mode", $Mode)
+        Write-Step "[4/4] Lancement silencieux de Yelen Notes en arriere-plan (mode $Mode)..."
+        $VenvPythonW = Join-Path $VenvDir "Scripts\pythonw.exe"
+        $LaunchExe = if (Test-Path -LiteralPath $VenvPythonW) { $VenvPythonW } else { $VenvPython }
+        $RunArgs = @((Join-Path $RootDir "run.py"), "--mode", $Mode)
         if ($Demo) {
             $RunArgs += "--demo"
         }
-        Run-Native $VenvPython $RunArgs
-        if ($script:LastExit -ne 0 -and -not $NoPause) {
-            Read-Host "Le serveur s'est arrete (code $($script:LastExit)). Appuyez sur Entree pour fermer"
-        }
+        Start-Process -FilePath $LaunchExe -ArgumentList $RunArgs -WorkingDirectory $RootDir -WindowStyle Hidden
     }
 }
 catch {
