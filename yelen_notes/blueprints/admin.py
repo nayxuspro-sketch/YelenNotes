@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 import socket
+import sys
 import tempfile
 
 from flask import (
@@ -61,6 +62,16 @@ from yelen_notes.services.backup_service import (
     restore_from_backup_archive,
     run_sqlite_integrity_check,
     verify_backup_archive,
+)
+from yelen_notes.blueprints.licensing import super_admin_only
+from yelen_notes.services.update_service import (
+    MAX_UPDATE_ARCHIVE_BYTES,
+    UpdateError,
+    apply_program_update,
+    check_online_update,
+    download_online_release_zip,
+    load_update_history,
+    schedule_graceful_server_restart,
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/administration")
@@ -374,6 +385,128 @@ def reset_user_password(user_id: int):
     )
     flash(f"Mot de passe réinitialisé pour « {user.username} ».", "success")
     return redirect(url_for("admin.users_manage"))
+
+
+@admin_bp.route("/mises-a-jour")
+@super_admin_only
+def updates_manage():
+    paths: RuntimePaths = current_app.config["RUNTIME_PATHS"]
+    current_version = str(current_app.config["APP_VERSION"])
+    result = check_online_update(paths, current_version) if request.args.get("verifier") == "1" else None
+    return render_template(
+        "admin/updates.html",
+        paths=paths,
+        current_version=current_version,
+        update_result=result,
+        update_history=load_update_history(paths),
+        is_frozen=bool(getattr(sys, "frozen", False)),
+    )
+
+
+@admin_bp.route("/mises-a-jour/appliquer-en-ligne", methods=["POST"])
+@super_admin_only
+def apply_online_update_route():
+    if getattr(sys, "frozen", False):
+        flash("L'édition compilée doit être mise à jour avec le paquet de déploiement officiel.", "warning")
+        return redirect(url_for("admin.updates_manage"))
+    paths: RuntimePaths = current_app.config["RUNTIME_PATHS"]
+    current_version = str(current_app.config["APP_VERSION"])
+    try:
+        check = check_online_update(paths, current_version)
+        if not check.reachable:
+            raise UpdateError(check.error_message or "Serveur de mise à jour injoignable.")
+        if not check.update_available or not check.download_tag:
+            raise UpdateError("Aucune version plus récente n'est actuellement disponible.")
+        archive = download_online_release_zip(paths, check.download_tag)
+        info = apply_program_update(
+            paths,
+            archive,
+            current_version=current_version,
+            actor_username=current_user.username,
+            source_label=f"GitHub Release {check.download_tag}",
+        )
+        record_audit_log(
+            "PROGRAM_UPDATE",
+            f"Mise à jour en ligne appliquée : v{info.previous_version} vers v{info.new_version}",
+            module="updates",
+            details={"source": info.source_label, "files_updated": info.files_updated},
+            commit=True,
+        )
+        restart_scheduled = schedule_graceful_server_restart(
+            paths,
+            str(current_app.config.get("SERVER_MODE", "monoposte")),
+            bool(current_app.config.get("IS_DEMO_MODE", False)),
+            request.environ.get("SERVER_PORT", 5000),
+        )
+        if restart_scheduled:
+            flash(
+                f"Mise à jour v{info.new_version} appliquée. Le serveur va redémarrer dans quelques secondes; "
+                "vos données scolaires, paramètres et licence ont été conservés.",
+                "success",
+            )
+        else:
+            flash(
+                f"Mise à jour v{info.new_version} appliquée. Une sauvegarde vérifiée a été créée : "
+                f"{info.backup_filename}. Redémarrez le serveur pour charger la nouvelle version.",
+                "success",
+            )
+    except (UpdateError, BackupError, OSError) as exc:
+        flash(f"Mise à jour en ligne annulée : {exc}", "danger")
+    return redirect(url_for("admin.updates_manage"))
+
+
+@admin_bp.route("/mises-a-jour/importer", methods=["POST"])
+@super_admin_only
+def apply_offline_update_route():
+    if getattr(sys, "frozen", False):
+        flash("L'édition compilée doit être mise à jour avec le paquet de déploiement officiel.", "warning")
+        return redirect(url_for("admin.updates_manage"))
+    paths: RuntimePaths = current_app.config["RUNTIME_PATHS"]
+    current_version = str(current_app.config["APP_VERSION"])
+    uploaded = request.files.get("update_zip")
+    if not uploaded or not uploaded.filename or not uploaded.filename.lower().endswith(".zip"):
+        flash("Veuillez sélectionner une archive de mise à jour .zip.", "danger")
+        return redirect(url_for("admin.updates_manage"))
+    try:
+        archive = uploaded.stream.read(MAX_UPDATE_ARCHIVE_BYTES + 1)
+        if len(archive) > MAX_UPDATE_ARCHIVE_BYTES:
+            raise UpdateError("Archive trop volumineuse (limite : 64 Mo).")
+        info = apply_program_update(
+            paths,
+            archive,
+            current_version=current_version,
+            actor_username=current_user.username,
+            source_label=f"Import hors ligne : {Path(uploaded.filename).name}",
+            allow_same_or_older=request.form.get("force_reinstall") == "1",
+        )
+        record_audit_log(
+            "PROGRAM_UPDATE",
+            f"Mise à jour hors ligne appliquée : v{info.previous_version} vers v{info.new_version}",
+            module="updates",
+            details={"source": info.source_label, "files_updated": info.files_updated},
+            commit=True,
+        )
+        restart_scheduled = schedule_graceful_server_restart(
+            paths,
+            str(current_app.config.get("SERVER_MODE", "monoposte")),
+            bool(current_app.config.get("IS_DEMO_MODE", False)),
+            request.environ.get("SERVER_PORT", 5000),
+        )
+        if restart_scheduled:
+            flash(
+                f"Mise à jour v{info.new_version} appliquée et sauvegarde vérifiée créée. "
+                "Le serveur va redémarrer.",
+                "success",
+            )
+        else:
+            flash(
+                f"Mise à jour v{info.new_version} appliquée. Sauvegarde vérifiée : {info.backup_filename}. "
+                "Redémarrez le serveur pour charger la nouvelle version.",
+                "success",
+            )
+    except (UpdateError, BackupError, OSError) as exc:
+        flash(f"Import de mise à jour annulé : {exc}", "danger")
+    return redirect(url_for("admin.updates_manage"))
 
 
 @admin_bp.route("/sauvegardes")

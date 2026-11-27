@@ -226,6 +226,7 @@
                     <div class="yn-nav-submenu">
                         {% if is_super_admin_user %}
                         <a href="{{ url_for('licensing.manage_licenses') }}" class="yn-nav-sublink {% if ep.startswith('licensing.') %}active{% endif %}">Licences d'utilisation</a>
+                        <a href="{{ url_for('admin.updates_manage') }}" class="yn-nav-sublink {% if ep.startswith('admin.updates_') or ep.startswith('admin.apply_') %}active{% endif %}">Mises à jour en ligne</a>
                         {% endif %}
                         {% if can_perm('rbac.view') %}
                         <a href="{{ url_for('rbac_admin.index') }}" class="yn-nav-sublink {% if ep.startswith('rbac_admin.') %}active{% endif %}">Rôles & Permissions</a>

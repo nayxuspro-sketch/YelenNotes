@@ -41,7 +41,7 @@ def build_flask_config(
         },
         "WTF_CSRF_ENABLED": True,
         "WTF_CSRF_TIME_LIMIT": 14400,  # 4h pour éviter l'expiration brutale en cours de saisie
-        "MAX_CONTENT_LENGTH": 16 * 1024 * 1024,  # 16 Mo max (import Excel / logo / archive sauvegarde)
+        "MAX_CONTENT_LENGTH": 66 * 1024 * 1024,  # marge multipart pour les archives de mise à jour limitées à 64 Mo
         "SESSION_COOKIE_NAME": "yelen_notes_session",
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
